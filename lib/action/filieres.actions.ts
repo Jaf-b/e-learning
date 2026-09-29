@@ -2,35 +2,34 @@
 
 import { db } from "@/db";
 import { filieres } from "@/db/schema";
-import {and, eq, ilike, or} from "drizzle-orm";
+import { and, asc, eq, ilike, or } from "drizzle-orm";
+import { unstable_cache, updateTag, revalidatePath } from "next/cache";
 
-// --- GET ALL ---
-export async function getAllFilieres() {
-    try {
-        const result = await db.query.filieres.findMany();
-        return { success: true, data: result ?? [] };
-    } catch (error) {
-        console.error("Erreur getAllFilieres:", error);
-        return { success: false, data: [], error: "Erreur de chargement." };
-    }
-}
+// ---------------------------------------------------------------------------
+// Cached reads
+// ---------------------------------------------------------------------------
 
-// --- CREATE ---
-export async function createFiliere(data: { departmentId: string; code: string; name: string }) {
-    try {
-        const [newFiliere] = await db.insert(filieres).values(data).returning();
-        return { success: true, data: newFiliere };
-    } catch (error) {
-        console.error("Erreur createFiliere:", error);
-        return { success: false, error: "Impossible de créer la filière." };
-    }
-}
+export const getAllFilieres = unstable_cache(
+    async () => {
+        try {
+            const result = await db.query.filieres.findMany({
+                orderBy: (filieres, { asc }) => [asc(filieres.name)],
+            });
+            return { success: true, data: result ?? [] };
+        } catch (error) {
+            console.error("Erreur getAllFilieres:", error);
+            return { success: false, data: [], error: "Erreur de chargement des filières." };
+        }
+    },
+    ["filieres-all"],
+    { tags: ["academic-structure"], revalidate: 3600 }
+);
 
-// --- READ (Filières d'un département spécifique) ---
 export async function getFilieresByDepartment(departmentId: string) {
     try {
         const result = await db.query.filieres.findMany({
             where: eq(filieres.departmentId, departmentId),
+            orderBy: (filieres, { asc }) => [asc(filieres.name)],
         });
         return { success: true, data: result ?? [] };
     } catch (error) {
@@ -39,34 +38,74 @@ export async function getFilieresByDepartment(departmentId: string) {
     }
 }
 
-// --- UPDATE ---
+// ---------------------------------------------------------------------------
+// Mutations
+// ---------------------------------------------------------------------------
+
+export async function createFiliere(data: { departmentId: string; code: string; name: string }) {
+    try {
+        const payload = {
+            departmentId: data.departmentId,
+            code: data.code,
+            name: data.name,
+        };
+        const [newFiliere] = await db.insert(filieres).values(payload).returning();
+        updateTag("academic-structure");
+        updateTag("admin-dashboard");
+        revalidatePath("/admin/academic-structure");
+        revalidatePath("/admin");
+        return { success: true, data: newFiliere };
+    } catch (error: any) {
+        console.error("Erreur createFiliere:", error);
+        return { success: false, error: error?.message || "Impossible de créer la filière." };
+    }
+}
+
 export async function updateFiliere(
     id: string,
     data: Partial<{ departmentId: string; code: string; name: string }>
 ) {
     try {
+        const payload: Record<string, unknown> = {};
+        if (data.departmentId !== undefined) payload.departmentId = data.departmentId;
+        if (data.code !== undefined) payload.code = data.code;
+        if (data.name !== undefined) payload.name = data.name;
+
         const [updated] = await db
             .update(filieres)
-            .set(data)
+            .set(payload)
             .where(eq(filieres.id, id))
             .returning();
+
+        updateTag("academic-structure");
+        updateTag("admin-dashboard");
+        revalidatePath("/admin/academic-structure");
+        revalidatePath("/admin");
         return { success: true, data: updated };
-    } catch (error) {
+    } catch (error: any) {
         console.error("Erreur updateFiliere:", error);
-        return { success: false, error: "Échec de la mise à jour." };
+        return { success: false, error: error?.message || "Échec de la mise à jour." };
     }
 }
 
-// --- DELETE ---
 export async function deleteFiliere(id: string) {
     try {
         const [deleted] = await db.delete(filieres).where(eq(filieres.id, id)).returning();
+        updateTag("academic-structure");
+        updateTag("admin-dashboard");
+        revalidatePath("/admin/academic-structure");
+        revalidatePath("/admin");
         return { success: true, data: deleted };
-    } catch (error) {
+    } catch (error: any) {
         console.error("Erreur deleteFiliere:", error);
-        return { success: false, error: "Impossible de supprimer la filière." };
+        return { success: false, error: "Impossible de supprimer la filière. Des cours y sont peut-être rattachés." };
     }
 }
+
+// ---------------------------------------------------------------------------
+// Search helper (not cached — real-time search)
+// ---------------------------------------------------------------------------
+
 export async function searchFilieres(searchTerm: string, departmentId?: string) {
     try {
         if (!searchTerm || searchTerm.trim() === "") {
@@ -89,7 +128,7 @@ export async function searchFilieres(searchTerm: string, departmentId?: string) 
             with: {
                 department: {
                     with: {
-                        faculty: true, // Remonte toute la chaîne hiérarchique (Filière -> Dept -> Faculté)
+                        faculty: true,
                     },
                 },
             },

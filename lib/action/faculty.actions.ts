@@ -1,58 +1,109 @@
 "use server"
 
-import {db} from "@/db";
-import {searchFilieres} from "@/lib/action/filieres.actions";
-import {searchDepartments} from "@/lib/action/departement.actions";
-import { ilike, or, eq } from "drizzle-orm";
-import {faculties} from "@/db/schema";
+import { db } from "@/db";
+import { searchFilieres } from "@/lib/action/filieres.actions";
+import { searchDepartments } from "@/lib/action/departement.actions";
+import { ilike, or, eq, asc } from "drizzle-orm";
+import { faculties } from "@/db/schema";
+import { unstable_cache, updateTag, revalidatePath } from "next/cache";
+
+// ---------------------------------------------------------------------------
+// Cached reads
+// ---------------------------------------------------------------------------
+
+export const getFacultiesWithTree = unstable_cache(
+    async () => {
+        try {
+            const result = await db.query.faculties.findMany({
+                orderBy: (faculties, { asc }) => [asc(faculties.name)],
+                with: {
+                    departments: {
+                        orderBy: (departments, { asc }) => [asc(departments.name)],
+                        with: {
+                            filieres: {
+                                orderBy: (filieres, { asc }) => [asc(filieres.name)],
+                            },
+                        },
+                    },
+                },
+            });
+            return { success: true, data: result ?? [] };
+        } catch (error) {
+            console.error("Erreur getFacultiesWithTree:", error);
+            return { success: false, data: [], error: "Impossible de récupérer la structure académique." };
+        }
+    },
+    ["academic-structure-tree"],
+    { tags: ["academic-structure"], revalidate: 3600 }
+);
+
+// ---------------------------------------------------------------------------
+// Mutations
+// ---------------------------------------------------------------------------
 
 export async function createFaculty(data: { code: string; name: string; description: string | null }) {
     try {
-        const [newFaculty] = await db.insert(faculties).values(data).returning();
+        const payload = {
+            code: data.code,
+            name: data.name,
+            description: data.description || null,
+        };
+        const [newFaculty] = await db.insert(faculties).values(payload).returning();
+        updateTag("academic-structure");
+        updateTag("admin-dashboard");
+        revalidatePath("/admin/academic-structure");
+        revalidatePath("/admin");
         return { success: true, data: newFaculty };
-    } catch (error) {
+    } catch (error: any) {
         console.error("Erreur createFaculty:", error);
-        return { success: false, error: "Impossible de créer la faculté." };
+        return { success: false, error: error?.message || "Impossible de créer la faculté." };
     }
 }
 
-export async function updateFaculty(id: string, data: Partial<{ code: string; name: string; description: string | null }>) {
+export async function updateFaculty(
+    id: string,
+    data: Partial<{ code: string; name: string; description: string | null }>
+) {
     try {
+        const payload: Record<string, unknown> = {};
+        if (data.code !== undefined) payload.code = data.code;
+        if (data.name !== undefined) payload.name = data.name;
+        if (data.description !== undefined) payload.description = data.description || null;
+
         const [updated] = await db
             .update(faculties)
-            .set(data)
+            .set(payload)
             .where(eq(faculties.id, id))
             .returning();
+
+        updateTag("academic-structure");
+        updateTag("admin-dashboard");
+        revalidatePath("/admin/academic-structure");
+        revalidatePath("/admin");
         return { success: true, data: updated };
-    } catch (error) {
+    } catch (error: any) {
         console.error("Erreur updateFaculty:", error);
-        return { success: false, error: "Échec de la mise à jour." };
+        return { success: false, error: error?.message || "Échec de la mise à jour." };
     }
 }
 
-export async function getFacultiesWithTree() {
+export async function deleteFaculty(id: string) {
     try {
-        const result = await db.query.faculties.findMany({
-            with: {
-                departments: {
-                    with: {
-                        filieres: true,
-                    },
-                },
-            },
-        });
-
-        return { success: true, data: result };
-    } catch (error) {
-        // Intercepte les erreurs réseau, de connexion DB, ou d'initialisation
-        console.error("Erreur lors de la récupération des facultés :", error);
-        return {
-            success: false,
-            error: "Impossible de récupérer la structure académique.",
-            data: []
-        };
+        const [deleted] = await db.delete(faculties).where(eq(faculties.id, id)).returning();
+        updateTag("academic-structure");
+        updateTag("admin-dashboard");
+        revalidatePath("/admin/academic-structure");
+        revalidatePath("/admin");
+        return { success: true, data: deleted };
+    } catch (error: any) {
+        console.error("Erreur deleteFaculty:", error);
+        return { success: false, error: "Impossible de supprimer la faculté. Des départements y sont peut-être rattachés." };
     }
 }
+
+// ---------------------------------------------------------------------------
+// Search helpers (not cached — real-time search)
+// ---------------------------------------------------------------------------
 
 export async function searchFaculties(searchTerm: string, includeTree = false) {
     try {
@@ -95,7 +146,6 @@ export async function searchAcademicStructure(searchTerm: string) {
             };
         }
 
-        // Exécution en parallèle pour de meilleures performances
         const [facultiesRes, departmentsRes, filieresRes] = await Promise.all([
             searchFaculties(searchTerm, false),
             searchDepartments(searchTerm),

@@ -23,7 +23,9 @@ import {
   FileQuestion,
   ChevronDown,
   ChevronUp,
+  Lock,
 } from "lucide-react";
+import { isAssessmentAvailable } from "@/lib/utils";
 
 interface QuestionOption {
   id: string;
@@ -73,11 +75,10 @@ export function TpSubmissionCard({
   const questions = assessment.questions ?? [];
   const hasQuestions = questions.length > 0;
 
-  // Per-question answers state (for text questions)
   const [answers, setAnswers] = useState<Record<string, string>>(() => {
-    // If no questions: use the existing single submission text on question id "global"
-    if (!hasQuestions) return { global: existingResponseText || "" };
-    return {};
+    const initial: Record<string, string> = {};
+    if (!hasQuestions) initial.global = existingResponseText || "";
+    return initial;
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -86,14 +87,17 @@ export function TpSubmissionCard({
     questions[0]?.id ?? null
   );
 
+  const avail = isAssessmentAvailable(assessment.dueDate);
+  const isLockedForFuture = !isSubmitted && avail.isFuture;
+
   const handleAnswerChange = (questionId: string, value: string) => {
+    if (isLockedForFuture) return;
     setAnswers((prev) => ({ ...prev, [questionId]: value }));
   };
 
   const buildSubmissionContent = () => {
     if (!hasQuestions) return answers["global"] || "";
 
-    // Serialize all answers as structured text
     return questions
       .map((q, i) => {
         const answer = answers[q.id] || "";
@@ -103,6 +107,8 @@ export function TpSubmissionCard({
   };
 
   const handleSubmit = async () => {
+    if (isLockedForFuture) return;
+
     const content = buildSubmissionContent();
     if (!content.trim()) {
       alert("Veuillez répondre à au moins une question avant d'envoyer.");
@@ -122,17 +128,6 @@ export function TpSubmissionCard({
       alert(res.error || "Échec de l'envoi du TP.");
     }
   };
-
-  const formattedDueDate = assessment.dueDate
-    ? new Date(assessment.dueDate).toLocaleDateString("fr-FR", {
-        day: "numeric",
-        month: "long",
-        year: "numeric",
-      })
-    : null;
-
-  const isOverdue =
-    assessment.dueDate ? new Date(assessment.dueDate) < new Date() : false;
 
   const answeredCount = hasQuestions
     ? questions.filter((q) => (answers[q.id] || "").trim().length > 0).length
@@ -156,18 +151,21 @@ export function TpSubmissionCard({
               )}
             </div>
 
-            {/* Due date */}
-            {formattedDueDate && (
+            {/* Date info & Lock status */}
+            {avail.formattedDate && (
               <div
-                className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full ${
-                  isOverdue
-                    ? "bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400"
-                    : "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400"
+                className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1 rounded-full ${
+                  isLockedForFuture
+                    ? "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300"
+                    : "bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300"
                 }`}
               >
-                <Calendar className="w-3.5 h-3.5" />
-                <span>Date limite : {formattedDueDate}</span>
-                {isOverdue && <span className="font-bold">(Expiré)</span>}
+                {isLockedForFuture ? <Lock className="w-3.5 h-3.5" /> : <Calendar className="w-3.5 h-3.5" />}
+                <span>
+                  {isLockedForFuture
+                    ? `Remise ouverte le : ${avail.formattedDate}`
+                    : `Date prévue : ${avail.formattedDate}`}
+                </span>
               </div>
             )}
           </div>
@@ -181,6 +179,20 @@ export function TpSubmissionCard({
         </CardHeader>
 
         <CardContent className="space-y-4">
+          {/* Lock Banner if future */}
+          {isLockedForFuture && (
+            <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 flex items-start gap-3 text-sm text-amber-900 dark:text-amber-200">
+              <Lock className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <h4 className="font-bold">Remise du TP verrouillée</h4>
+                <p className="text-xs text-amber-800 dark:text-amber-300 mt-1">
+                  Ce travail pratique est en cours de préparation. La remise des travaux sera automatiquement débloquée le{" "}
+                  <strong>{avail.formattedDate}</strong>.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Instructions */}
           {assessment.description && (
             <div className="p-4 rounded-lg bg-muted/60 border text-sm space-y-1">
@@ -219,17 +231,6 @@ export function TpSubmissionCard({
               )}
             </div>
           )}
-
-          {/* Early submission info (no restriction) */}
-          {!isSubmitted && (
-            <div className="flex items-center gap-2 p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-700 dark:text-emerald-400">
-              <CheckCircle2 className="w-4 h-4 shrink-0" />
-              <span>
-                Vous pouvez soumettre votre TP <strong>à tout moment</strong>, même avant la date limite.
-                Votre dernier envoi sera pris en compte.
-              </span>
-            </div>
-          )}
         </CardContent>
       </Card>
 
@@ -255,7 +256,6 @@ export function TpSubmissionCard({
                   isExpanded ? "shadow-md border-blue-300 dark:border-blue-700" : "shadow-sm"
                 }`}
               >
-                {/* Question header */}
                 <button
                   className="w-full text-left"
                   onClick={() => setExpandedQuestion(isExpanded ? null : q.id)}
@@ -271,15 +271,6 @@ export function TpSubmissionCard({
                           <div className="flex items-center gap-2 mt-1.5">
                             <Badge variant="outline" className="text-[10px] px-1.5">
                               {q.points} pt{q.points > 1 ? "s" : ""}
-                            </Badge>
-                            <Badge variant="secondary" className="text-[10px] px-1.5">
-                              {q.questionType === "ESSAY"
-                                ? "Réponse rédigée"
-                                : q.questionType === "SHORT_ANSWER"
-                                ? "Réponse courte"
-                                : q.questionType === "MCQ"
-                                ? "Choix multiple"
-                                : "Vrai / Faux"}
                             </Badge>
                             {(answers[q.id] || "").trim().length > 0 && (
                               <span className="text-[10px] text-emerald-600 font-medium flex items-center gap-0.5">
@@ -298,66 +289,21 @@ export function TpSubmissionCard({
                   </CardHeader>
                 </button>
 
-                {/* Answer area */}
                 {isExpanded && (
                   <CardContent className="pt-0 pb-4 space-y-3">
                     <div className="border-t pt-4">
-                      {(q.questionType === "ESSAY" || q.questionType === "SHORT_ANSWER") && (
-                        <Textarea
-                          placeholder={
-                            q.questionType === "ESSAY"
-                              ? "Rédigez votre réponse développée ici..."
-                              : "Votre réponse courte..."
-                          }
-                          value={answers[q.id] || ""}
-                          onChange={(e) => handleAnswerChange(q.id, e.target.value)}
-                          rows={q.questionType === "ESSAY" ? 6 : 3}
-                          className="text-sm resize-y"
-                        />
-                      )}
-
-                      {q.questionType === "MCQ" && q.options && q.options.length > 0 && (
-                        <div className="space-y-2">
-                          <p className="text-xs text-muted-foreground mb-2">Sélectionnez la bonne réponse :</p>
-                          {q.options.map((opt) => {
-                            const isSelected = answers[q.id] === opt.id;
-                            return (
-                              <button
-                                key={opt.id}
-                                onClick={() => handleAnswerChange(q.id, opt.id)}
-                                className={`w-full text-left px-4 py-2.5 rounded-lg border text-sm transition-all ${
-                                  isSelected
-                                    ? "bg-blue-600 text-white border-blue-600 font-medium"
-                                    : "hover:bg-accent border-border"
-                                }`}
-                              >
-                                {opt.text}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
-
-                      {q.questionType === "TRUE_FALSE" && (
-                        <div className="flex gap-3">
-                          {["Vrai", "Faux"].map((label) => {
-                            const isSelected = answers[q.id] === label;
-                            return (
-                              <button
-                                key={label}
-                                onClick={() => handleAnswerChange(q.id, label)}
-                                className={`flex-1 py-2.5 rounded-lg border text-sm font-medium transition-all ${
-                                  isSelected
-                                    ? "bg-blue-600 text-white border-blue-600"
-                                    : "hover:bg-accent border-border"
-                                }`}
-                              >
-                                {label}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
+                      <Textarea
+                        placeholder={
+                          isLockedForFuture
+                            ? "La remise sera ouverte le jour prévu..."
+                            : "Rédigez votre réponse développée ici..."
+                        }
+                        value={answers[q.id] || ""}
+                        onChange={(e) => handleAnswerChange(q.id, e.target.value)}
+                        disabled={isLockedForFuture}
+                        rows={5}
+                        className="text-sm resize-y"
+                      />
                     </div>
                   </CardContent>
                 )}
@@ -376,9 +322,14 @@ export function TpSubmissionCard({
           </CardHeader>
           <CardContent>
             <Textarea
-              placeholder="Saisissez votre travail, collez votre code, ou un lien Google Drive / GitHub..."
+              placeholder={
+                isLockedForFuture
+                  ? "Remise bloquée jusqu'à la date d'ouverture..."
+                  : "Saisissez votre travail, collez votre code, ou un lien Google Drive / GitHub..."
+              }
               value={answers["global"] || ""}
               onChange={(e) => handleAnswerChange("global", e.target.value)}
+              disabled={isLockedForFuture}
               rows={10}
               className="resize-y text-sm font-mono"
             />
@@ -391,19 +342,27 @@ export function TpSubmissionCard({
         <CardFooter className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4">
           <div className="text-xs text-muted-foreground flex items-center gap-1.5">
             <Clock className="w-3.5 h-3.5" />
-            {isSubmitted
-              ? "✅ TP soumis — vous pouvez modifier et re-soumettre avant la correction."
-              : hasQuestions
-              ? `${answeredCount} / ${questions.length} question${questions.length > 1 ? "s" : ""} répondue${answeredCount > 1 ? "s" : ""}`
-              : "Non soumis"}
+            {isLockedForFuture
+              ? `🔒 Remise verrouillée — disponible le ${avail.formattedDate}`
+              : isSubmitted
+              ? "✅ TP soumis — vous pouvez modifier et re-soumettre votre travail."
+              : "Envoi ouvert"}
           </div>
           <Button
             onClick={handleSubmit}
-            disabled={isSubmitting}
-            className="bg-blue-600 hover:bg-blue-700 min-w-[180px]"
+            disabled={isSubmitting || isLockedForFuture}
+            className={`min-w-[180px] ${
+              isLockedForFuture
+                ? "bg-muted text-muted-foreground cursor-not-allowed opacity-65"
+                : "bg-blue-600 hover:bg-blue-700"
+            }`}
           >
             {isSubmitting ? (
               "Envoi en cours..."
+            ) : isLockedForFuture ? (
+              <>
+                <Lock className="w-4 h-4 mr-2" /> Remise bloquée
+              </>
             ) : (
               <>
                 <UploadCloud className="w-4 h-4 mr-2" />

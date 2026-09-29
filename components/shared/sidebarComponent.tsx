@@ -140,7 +140,7 @@ export default function SidebarComponent({ user }: SidebarProps) {
   };
 
   return (
-    <Sidebar variant="floating">
+    <Sidebar >
       <SidebarContent>
         <SidebarMenu>
           {menu.map((item, index) => (

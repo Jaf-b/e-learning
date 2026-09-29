@@ -2,7 +2,8 @@
 
 import { db } from "@/db";
 import { promotions } from "@/db/schema";
-import {and, eq, ilike} from "drizzle-orm";
+import { and, desc, eq, ilike } from "drizzle-orm";
+import { unstable_cache, updateTag, revalidatePath } from "next/cache";
 
 // --- CREATE PROMOTION ---
 export async function createPromotion(data: {
@@ -13,43 +14,51 @@ export async function createPromotion(data: {
 }) {
     try {
         const [newPromotion] = await db.insert(promotions).values(data).returning();
+        updateTag("promotions");
+        updateTag("admin-dashboard");
+        revalidatePath("/admin/user-management");
         return { success: true, data: newPromotion };
-    } catch (error) {
+    } catch (error: any) {
         console.error("Erreur createPromotion:", error);
-        return { success: false, error: "Impossible de créer la promotion." };
+        return { success: false, error: error?.message || "Impossible de créer la promotion." };
     }
 }
 
 // --- READ ALL PROMOTIONS (Avec détails complets) ---
-export async function getPromotions() {
-    try {
-        const result = await db.query.promotions.findMany({
-            with: {
-                filiere: {
-                    with: {
-                        department: {
-                            with: {
-                                faculty: true,
+export const getPromotions = unstable_cache(
+    async () => {
+        try {
+            const result = await db.query.promotions.findMany({
+                orderBy: (promotions, { asc }) => [asc(promotions.code)],
+                with: {
+                    filiere: {
+                        with: {
+                            department: {
+                                with: {
+                                    faculty: true,
+                                },
                             },
                         },
                     },
-                },
-                degreeLevel: {
-                    with: {
-                        degree: true,
+                    degreeLevel: {
+                        with: {
+                            degree: true,
+                        },
                     },
+                    academicYear: true,
+                    students: true, // Inscriptions des étudiants
+                    courses: true,  // Cours dispensés à cette promotion
                 },
-                academicYear: true,
-                students: true, // Inscriptions des étudiants
-                courses: true,  // Cours dispensés à cette promotion
-            },
-        });
-        return { success: true, data: result ?? [] };
-    } catch (error) {
-        console.error("Erreur getPromotions:", error);
-        return { success: false, data: [], error: "Échec de récupération des promotions." };
-    }
-}
+            });
+            return { success: true, data: result ?? [] };
+        } catch (error) {
+            console.error("Erreur getPromotions:", error);
+            return { success: false, data: [], error: "Échec de récupération des promotions." };
+        }
+    },
+    ["promotions-all"],
+    { tags: ["promotions"], revalidate: 3600 }
+);
 
 // --- SEARCH PROMOTIONS ---
 export async function searchPromotions(searchTerm: string, academicYearId?: string) {
@@ -97,10 +106,15 @@ export async function updatePromotion(
             .set(data)
             .where(eq(promotions.id, id))
             .returning();
+
+        updateTag("promotions");
+        updateTag("admin-dashboard");
+        revalidatePath("/admin/user-management");
+
         return { success: true, data: updated };
-    } catch (error) {
+    } catch (error: any) {
         console.error("Erreur updatePromotion:", error);
-        return { success: false, error: "Échec de la mise à jour." };
+        return { success: false, error: error?.message || "Échec de la mise à jour." };
     }
 }
 
@@ -108,9 +122,12 @@ export async function updatePromotion(
 export async function deletePromotion(id: string) {
     try {
         const [deleted] = await db.delete(promotions).where(eq(promotions.id, id)).returning();
+        updateTag("promotions");
+        updateTag("admin-dashboard");
+        revalidatePath("/admin/user-management");
         return { success: true, data: deleted };
-    } catch (error) {
+    } catch (error: any) {
         console.error("Erreur deletePromotion:", error);
-        return { success: false, error: "Impossible de supprimer la promotion." };
+        return { success: false, error: error?.message || "Impossible de supprimer la promotion." };
     }
 }

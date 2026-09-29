@@ -1,59 +1,65 @@
-import React from 'react';
-import { Course } from '@/types';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import Link from "next/link";
-import { Button } from "@/components/ui/button";
+import React from "react";
+import { Course } from "@/types";
+import CourseCard from "@/components/shared/course-card";
+import { BookOpen } from "lucide-react";
 
-// On permet à 'author' d'être optionnel au niveau du composant d'affichage
-type CourseItem = Omit<Course, 'authorId'> & { authorId?: Course['authorId'] };
+type CourseItem = Omit<Course, "authorId"> & {
+  authorId?: Course["authorId"];
+  moduleCount?: number;
+  filiereName?: string;
+  degreeLevelName?: string;
+  authorName?: string;
+};
 
 interface CourseListProps {
-    courses: CourseItem[];
+  courses: CourseItem[];
+  baseUrl?: string;
+  actionLabel?: string;
+  emptyMessage?: string;
+  onCourseClick?: (course: CourseItem) => void;
 }
 
-const CourseList = ({ courses }: CourseListProps) => {
-    if (!courses || courses.length === 0) {
-        return (
-            <div className="text-center py-12 border border-dashed rounded-lg text-muted-foreground">
-                Aucun cours disponible pour le moment.
-            </div>
-        );
-    }
-
+const CourseList = ({
+  courses,
+  baseUrl = "/teacher/courses",
+  actionLabel = "Gérer le cours",
+  emptyMessage = "Aucun cours disponible pour le moment.",
+  onCourseClick,
+}: CourseListProps) => {
+  if (!courses || courses.length === 0) {
     return (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-            {courses.map((course) => (
-                <Card key={course.id} className="flex flex-col justify-between">
-                    <CardHeader>
-                        <CardTitle className="line-clamp-1">{course.title}</CardTitle>
-                        <CardDescription className="line-clamp-2">
-                            {course.description ?? "Aucune description fournie."}
-                        </CardDescription>
-                    </CardHeader>
-
-                    <CardContent className="space-y-1">
-                        <p className="text-sm">
-                            <span className="font-medium">Code :</span> {course.code}
-                        </p>
-                        <p className="text-sm">
-                            <span className="font-medium">Crédits :</span> {course.credits}
-                        </p>
-                        <p className="text-sm">
-                            <span className="font-medium">Statut :</span> {course.status}
-                        </p>
-                    </CardContent>
-
-                    <CardFooter>
-                        <Button className="w-full">
-                            <Link href={`/teacher/courses/${course.id}`}>
-                                Voir le cours
-                            </Link>
-                        </Button>
-                    </CardFooter>
-                </Card>
-            ))}
+      <div className="flex flex-col items-center justify-center text-center py-16 px-4 border border-dashed border-border/80 rounded-2xl bg-card/50">
+        <div className="p-4 rounded-full bg-primary/10 text-primary mb-3">
+          <BookOpen className="w-8 h-8" />
         </div>
+        <h3 className="text-base font-bold text-foreground mb-1">Aucun cours trouvé</h3>
+        <p className="text-xs text-muted-foreground max-w-sm">{emptyMessage}</p>
+      </div>
     );
+  }
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+      {courses.map((course) => (
+        <CourseCard
+          key={course.id}
+          id={course.id}
+          code={course.code}
+          title={course.title}
+          description={course.description}
+          status={course.status}
+          credits={course.credits}
+          filiereName={course.filiereName}
+          degreeLevelName={course.degreeLevelName}
+          authorName={course.authorName}
+          moduleCount={course.moduleCount}
+          href={onCourseClick ? undefined : `${baseUrl}/${course.id}`}
+          onClick={onCourseClick ? () => onCourseClick(course) : undefined}
+          actionLabel={actionLabel}
+        />
+      ))}
+    </div>
+  );
 };
 
 export default CourseList;

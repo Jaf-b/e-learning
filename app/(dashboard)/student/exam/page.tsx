@@ -6,8 +6,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getStudentAssessmentsByType } from "@/lib/action/student.actions";
-import { GraduationCap, CheckCircle2, Clock, ArrowRight, Calendar } from "lucide-react";
+import { GraduationCap, CheckCircle2, Clock, ArrowRight, Calendar, Lock } from "lucide-react";
 import Link from "next/link";
+import { isAssessmentAvailable } from "@/lib/utils";
 
 export default function StudentExamPage() {
   const [exams, setExams] = useState<any[]>([]);
@@ -45,7 +46,7 @@ export default function StudentExamPage() {
       <div className="border-b pb-6">
         <h1 className="text-3xl font-bold tracking-tight">Examens</h1>
         <p className="text-muted-foreground mt-1 text-sm">
-          Passez vos examens de session et examens de rattrapage en ligne.
+          Passez vos examens de session et de rattrapage le jour de l'épreuve. Vos notes sont enregistrées directement en base de données.
         </p>
       </div>
 
@@ -57,50 +58,70 @@ export default function StudentExamPage() {
         </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {exams.map((exam) => (
-            <Card key={exam.id} className="flex flex-col justify-between hover:shadow-md transition-shadow border-rose-500/20">
-              <CardHeader>
-                <div className="flex items-center justify-between gap-2 mb-2">
-                  <Badge variant="destructive">
-                    {exam.type === "EXAM" ? "Examen Final" : "Rattrapage"}
-                  </Badge>
-                  <Badge variant="outline">{exam.maxScore} pts</Badge>
-                </div>
-                <CardTitle className="text-lg font-bold line-clamp-1">{exam.title}</CardTitle>
-                <CardDescription className="text-xs font-medium text-rose-600 dark:text-rose-400">
-                  {exam.courseTitle}
-                </CardDescription>
-                {exam.description && (
-                  <p className="text-xs text-muted-foreground line-clamp-2 mt-2">{exam.description}</p>
-                )}
-              </CardHeader>
+          {exams.map((exam) => {
+            const avail = isAssessmentAvailable(exam.dueDate);
 
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between text-xs border-t pt-3">
-                  <span className="text-muted-foreground flex items-center gap-1">
-                    <Calendar className="w-3.5 h-3.5" />
-                    {exam.dueDate ? new Date(exam.dueDate).toLocaleDateString("fr-FR") : "Date à confirmer"}
-                  </span>
-                  {exam.isSubmitted ? (
-                    <Badge variant="outline" className="bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50">
-                      <CheckCircle2 className="w-3 h-3 mr-1" />
-                      {exam.gradeScore !== null ? `${exam.gradeScore}/${exam.maxScore}` : "Terminé"}
+            return (
+              <Card key={exam.id} className="flex flex-col justify-between hover:shadow-md transition-shadow border-rose-500/20">
+                <CardHeader>
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <Badge variant="destructive">
+                      {exam.type === "EXAM" ? "Examen Final" : "Rattrapage"}
                     </Badge>
-                  ) : (
-                    <Badge variant="outline" className="text-rose-600">
-                      <Clock className="w-3 h-3 mr-1" /> Non composé
-                    </Badge>
+                    <Badge variant="outline">{exam.maxScore} pts</Badge>
+                  </div>
+                  <CardTitle className="text-lg font-bold line-clamp-1">{exam.title}</CardTitle>
+                  <CardDescription className="text-xs font-medium text-rose-600 dark:text-rose-400">
+                    {exam.courseTitle}
+                  </CardDescription>
+                  {exam.description && (
+                    <p className="text-xs text-muted-foreground line-clamp-2 mt-2">{exam.description}</p>
                   )}
-                </div>
+                </CardHeader>
 
-                <Link href={`/student/assessment/${exam.id}`}>
-                  <Button className="w-full variant-default bg-rose-600 hover:bg-rose-700">
-                    {exam.isSubmitted ? "Consulter la copie" : "Composer l'examen"} <ArrowRight className="w-4 h-4 ml-1" />
-                  </Button>
-                </Link>
-              </CardContent>
-            </Card>
-          ))}
+                <CardContent className="space-y-4">
+                  <div className="flex items-center justify-between text-xs border-t pt-3">
+                    <span className="text-muted-foreground flex items-center gap-1">
+                      <Calendar className="w-3.5 h-3.5" />
+                      {avail.formattedDate ? avail.formattedDate : "Disponible immédiatement"}
+                    </span>
+                    {exam.isSubmitted ? (
+                      <Badge variant="outline" className="bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50">
+                        <CheckCircle2 className="w-3 h-3 mr-1" />
+                        {exam.gradeScore !== null ? `${exam.gradeScore}/${exam.maxScore}` : "Terminé"}
+                      </Badge>
+                    ) : avail.isFuture ? (
+                      <Badge variant="outline" className="text-amber-600 bg-amber-50 dark:bg-amber-950/40">
+                        <Lock className="w-3 h-3 mr-1" /> Programmé
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-rose-600 bg-rose-50 dark:bg-rose-950/40">
+                        <Clock className="w-3 h-3 mr-1" /> Ouvert aujourd'hui
+                      </Badge>
+                    )}
+                  </div>
+
+                  {exam.isSubmitted ? (
+                    <Link href={`/student/assessment/${exam.id}`}>
+                      <Button className="w-full bg-emerald-600 hover:bg-emerald-700">
+                        Consulter le résultat <ArrowRight className="w-4 h-4 ml-1" />
+                      </Button>
+                    </Link>
+                  ) : avail.isFuture ? (
+                    <Button disabled className="w-full opacity-65 cursor-not-allowed">
+                      <Lock className="w-4 h-4 mr-1.5" /> Ouvert le {avail.formattedDate}
+                    </Button>
+                  ) : (
+                    <Link href={`/student/assessment/${exam.id}`}>
+                      <Button className="w-full bg-rose-600 hover:bg-rose-700">
+                        Composer l'examen <ArrowRight className="w-4 h-4 ml-1" />
+                      </Button>
+                    </Link>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
     </div>

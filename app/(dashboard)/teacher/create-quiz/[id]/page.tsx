@@ -13,8 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Separator } from "@/components/ui/separator";
-import { ArrowLeft, Save, FileCheck, AlertCircle, CheckCircle2, HelpCircle, Calendar, Scale, Award } from "lucide-react";
+import { ArrowLeft, Save, FileCheck, AlertCircle, CheckCircle2, HelpCircle, Calendar, Scale, Award, Sparkles } from "lucide-react";
 import {
     getQuizInitialData,
     createAssessmentForCourse,
@@ -33,12 +32,11 @@ export default function CreateQuizPage() {
     const [assessment, setAssessment] = useState<any>(null);
     const [questions, setQuestions] = useState<any[]>([]);
     const [selectedQuestion, setSelectedQuestion] = useState<any | null>(null);
-    const [existingTypes, setExistingTypes] = useState<string[]>([]);
 
-    // Formulaire d'évaluation
+    // Formulaire d'évaluation (Quiz / Interros & Examens)
     const [title, setTitle] = useState("");
     const [description, setDescription] = useState("");
-    const [type, setType] = useState<"QUIZ" | "EXAM" | "RETAKE_EXAM" | "TP" | "ASSIGNMENT">("QUIZ");
+    const [type, setType] = useState<"QUIZ" | "EXAM" | "RETAKE_EXAM">("QUIZ");
     const [maxScore, setMaxScore] = useState("20.00");
     const [weight, setWeight] = useState("1.00");
     const [dueDate, setDueDate] = useState("");
@@ -56,13 +54,12 @@ export default function CreateQuizPage() {
 
         if (res.success) {
             setCourse(res.course);
-            setExistingTypes(res.existingTypes || []);
 
             if (res.isExistingAssessment && res.assessment) {
                 setAssessment(res.assessment);
                 setTitle(res.assessment.title || "");
                 setDescription(res.assessment.description || "");
-                setType(res.assessment.type as any);
+                setType((["QUIZ", "EXAM", "RETAKE_EXAM"].includes(res.assessment.type) ? res.assessment.type : "QUIZ") as any);
                 setMaxScore(res.assessment.maxScore ? String(res.assessment.maxScore) : "20.00");
                 setWeight(res.assessment.weight ? String(res.assessment.weight) : "1.00");
                 setDueDate(res.assessment.dueDate || "");
@@ -71,18 +68,14 @@ export default function CreateQuizPage() {
                     setSelectedQuestion(res.assessment.questions[0]);
                 }
             } else {
-                // Déterminer le type par défaut disponible (si QUIZ est pris, proposer TP)
                 const isQuizTaken = res.existingTypes?.includes("QUIZ");
-                const isExamTaken = res.existingTypes?.includes("EXAM");
-
                 if (!isQuizTaken) {
                     setType("QUIZ");
-                } else if (!isExamTaken) {
-                    setType("EXAM");
+                    setTitle(course ? `Interrogation - ${course.code}` : "Nouvelle Interrogation");
                 } else {
-                    setType("TP");
+                    setType("EXAM");
+                    setTitle(course ? `Examen Final - ${course.code}` : "Nouvel Examen");
                 }
-                setTitle(course ? `Évaluation - ${course.code}` : "Nouveau Quiz");
             }
         } else {
             setErrorMsg(res.error || "Impossible de charger les données.");
@@ -99,7 +92,6 @@ export default function CreateQuizPage() {
         const res = await getQuestionsByAssessmentId(assessmentId);
         if (res.success) {
             setQuestions(res.data || []);
-            // Garder la sélection ou sélectionner la nouvelle
             if (selectedQuestion?.id) {
                 const updatedSel = res.data?.find((q: any) => q.id === selectedQuestion.id);
                 setSelectedQuestion(updatedSel || (res.data && res.data.length > 0 ? res.data[0] : null));
@@ -109,11 +101,11 @@ export default function CreateQuizPage() {
         }
     };
 
-    // Sauvegarder les métadonnées de l'évaluation
+    // Sauvegarder les métadonnées de l'épreuve
     const handleSaveAssessment = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!title.trim()) {
-            setErrorMsg("Le titre de l'évaluation est requis.");
+            setErrorMsg("Le titre de l'épreuve est requis.");
             return;
         }
 
@@ -123,7 +115,6 @@ export default function CreateQuizPage() {
 
         try {
             if (assessment?.id) {
-                // Mise à jour
                 const res = await updateAssessment(assessment.id, {
                     title,
                     description,
@@ -135,12 +126,11 @@ export default function CreateQuizPage() {
 
                 if (res.success) {
                     setAssessment(res.data);
-                    setSuccessMsg("Évaluation mise à jour avec succès.");
+                    setSuccessMsg("Épreuve mise à jour avec succès.");
                 } else {
                     setErrorMsg(res.error || "Erreur de mise à jour.");
                 }
             } else {
-                // Création
                 const courseId = course?.id || id;
                 const res = await createAssessmentForCourse(courseId, {
                     title,
@@ -153,11 +143,10 @@ export default function CreateQuizPage() {
 
                 if (res.success && res.data) {
                     setAssessment(res.data);
-                    setSuccessMsg("Évaluation créée avec succès ! Vous pouvez maintenant ajouter des questions.");
-                    // Rediriger vers l'URL de l'évaluation créée sans recharger brutalement
+                    setSuccessMsg("Épreuve créée avec succès ! Vous pouvez maintenant ajouter des questions à choix unique.");
                     router.replace(`/teacher/create-quiz/${res.data.id}`);
                 } else {
-                    setErrorMsg(res.error || "Erreur de création d'évaluation.");
+                    setErrorMsg(res.error || "Erreur de création de l'épreuve.");
                 }
             }
         } catch (err) {
@@ -168,7 +157,6 @@ export default function CreateQuizPage() {
         }
     };
 
-    // Ajouter une nouvelle question (brouillon)
     const handleAddQuestion = () => {
         setSelectedQuestion(null);
     };
@@ -200,8 +188,6 @@ export default function CreateQuizPage() {
     }
 
     const courseId = course?.id || (assessment?.promotionCourse?.courseId ?? id);
-    const isQuizDisabled = existingTypes.includes("QUIZ") && assessment?.type !== "QUIZ";
-    const isExamDisabled = existingTypes.includes("EXAM") && assessment?.type !== "EXAM";
 
     return (
         <div className="flex flex-col gap-6 p-4 md:p-6 lg:p-8 max-w-[1400px] mx-auto w-full">
@@ -216,12 +202,12 @@ export default function CreateQuizPage() {
                     <div>
                         <div className="flex items-center gap-2">
                             {course?.code && <Badge variant="outline">{course.code}</Badge>}
-                            <Badge className="bg-primary/15 text-primary border-primary/20">
-                                {assessment ? `Édition : ${assessment.type}` : "Création de Quiz"}
+                            <Badge className="bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/20">
+                                Concepteur de Quiz & Examens
                             </Badge>
                         </div>
                         <h1 className="text-2xl font-bold tracking-tight mt-1">
-                            {assessment ? assessment.title : (course ? `Nouveau Quiz : ${course.title}` : "Configuration du Quiz")}
+                            {assessment ? assessment.title : (course ? `Création Épreuve - ${course.title}` : "Configuration du Quiz / Examen")}
                         </h1>
                     </div>
                 </div>
@@ -248,24 +234,24 @@ export default function CreateQuizPage() {
                 </div>
             )}
 
-            {/* Section 1 : Configuration des métadonnées de l'Évaluation */}
+            {/* Section 1 : Configuration des métadonnées du Quiz / Examen */}
             <Card className="shadow-xs border">
                 <CardHeader className="pb-3">
                     <CardTitle className="text-lg font-bold flex items-center gap-2">
-                        <FileCheck className="w-5 h-5 text-primary" />
-                        1. Informations Générales de l'Évaluation
+                        <FileCheck className="w-5 h-5 text-amber-600" />
+                        1. Paramètres de l'Interrogation / Examen
                     </CardTitle>
                     <CardDescription>
-                        Définissez le type, le barème et les règles d'évaluation pour ce cours.
+                        Définissez le type d'épreuve (Interrogation ou Examen), le barème et la date de l'évaluation.
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
                     <form onSubmit={handleSaveAssessment} className="flex flex-col gap-4">
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div className="md:col-span-2 flex flex-col gap-1.5">
-                                <Label className="text-xs font-semibold">Titre de l'évaluation *</Label>
+                                <Label className="text-xs font-semibold">Titre de l'épreuve *</Label>
                                 <Input
-                                    placeholder="Ex: Interrogation Chapitre 1 - Bases de données"
+                                    placeholder="Ex: Interrogation Chapitre 1 ou Examen de Session"
                                     value={title}
                                     onChange={(e) => setTitle(e.target.value)}
                                     required
@@ -273,29 +259,23 @@ export default function CreateQuizPage() {
                             </div>
 
                             <div className="flex flex-col gap-1.5">
-                                <Label className="text-xs font-semibold">Type d'évaluation *</Label>
+                                <Label className="text-xs font-semibold">Type d'épreuve *</Label>
                                 <Select
                                     value={type}
                                     onValueChange={(v: any) => setType(v)}
                                 >
-                                    <SelectTrigger className="h-9 text-xs">
-                                        <SelectValue placeholder="Sélectionner un type" />
+                                    <SelectTrigger className="h-9 text-xs font-medium">
+                                        <SelectValue placeholder="Sélectionner le type" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="QUIZ" disabled={isQuizDisabled}>
-                                            Quiz / Interrogation {isQuizDisabled ? "(Déjà créé)" : "(1 max)"}
+                                        <SelectItem value="QUIZ">
+                                            Quiz / Interrogation (Choix Unique)
                                         </SelectItem>
-                                        <SelectItem value="EXAM" disabled={isExamDisabled}>
-                                            Examen Final {isExamDisabled ? "(Déjà créé)" : "(1 max)"}
-                                        </SelectItem>
-                                        <SelectItem value="TP">
-                                            Travail Pratique (TP) (Multiples)
-                                        </SelectItem>
-                                        <SelectItem value="ASSIGNMENT">
-                                            Devoir à domicile (Multiples)
+                                        <SelectItem value="EXAM">
+                                            Examen Final (Choix Unique)
                                         </SelectItem>
                                         <SelectItem value="RETAKE_EXAM">
-                                            Examen de Rattrapage
+                                            Examen de Rattrapage (Choix Unique)
                                         </SelectItem>
                                     </SelectContent>
                                 </Select>
@@ -319,7 +299,7 @@ export default function CreateQuizPage() {
 
                             <div className="flex flex-col gap-1.5">
                                 <Label className="text-xs font-semibold flex items-center gap-1">
-                                    <Scale className="w-3.5 h-3.5 text-muted-foreground" /> Coefficient / Poids
+                                    <Scale className="w-3.5 h-3.5 text-muted-foreground" /> Coefficient
                                 </Label>
                                 <Input
                                     type="number"
@@ -333,7 +313,7 @@ export default function CreateQuizPage() {
 
                             <div className="flex flex-col gap-1.5">
                                 <Label className="text-xs font-semibold flex items-center gap-1">
-                                    <Calendar className="w-3.5 h-3.5 text-muted-foreground" /> Date limite (optionnel)
+                                    <Calendar className="w-3.5 h-3.5 text-muted-foreground" /> Date de l'examen / quiz *
                                 </Label>
                                 <Input
                                     type="date"
@@ -345,37 +325,37 @@ export default function CreateQuizPage() {
                         </div>
 
                         <div className="flex flex-col gap-1.5">
-                            <Label className="text-xs font-semibold">Description / Consignes</Label>
+                            <Label className="text-xs font-semibold">Consignes de l'épreuve</Label>
                             <Textarea
                                 rows={2}
                                 className="text-xs resize-y"
-                                placeholder="Consignes particulières pour les étudiants..."
+                                placeholder="Consignes particulières, durée de l'épreuve..."
                                 value={description}
                                 onChange={(e) => setDescription(e.target.value)}
                             />
                         </div>
 
                         <div className="flex justify-end mt-1">
-                            <Button type="submit" size="sm" disabled={isSavingAssessment}>
+                            <Button type="submit" size="sm" disabled={isSavingAssessment} className="bg-amber-600 hover:bg-amber-700">
                                 <Save className="mr-2 h-4 w-4" />
-                                {isSavingAssessment ? "Enregistrement..." : (assessment ? "Mettre à jour l'évaluation" : "Créer et passer aux questions")}
+                                {isSavingAssessment ? "Enregistrement..." : (assessment ? "Mettre à jour l'épreuve" : "Enregistrer et ajouter des questions")}
                             </Button>
                         </div>
                     </form>
                 </CardContent>
             </Card>
 
-            {/* Section 2 : Éditeur de Questions (Interactive 2-Column Builder) */}
+            {/* Section 2 : Éditeur de Questions (QCM à choix unique) */}
             {assessment ? (
                 <div className="flex flex-col gap-4">
                     <div className="flex items-center justify-between">
                         <div>
                             <h2 className="text-lg font-bold flex items-center gap-2">
-                                <HelpCircle className="w-5 h-5 text-primary" />
-                                2. Conception des Questions
+                                <Sparkles className="w-5 h-5 text-amber-600" />
+                                2. Questions QCM (Choix Unique)
                             </h2>
                             <p className="text-xs text-muted-foreground">
-                                Ajoutez et configurez les questions de cette évaluation.
+                                Ajoutez les questions de votre quiz ou examen. Chaque question aura une seule réponse correcte.
                             </p>
                         </div>
                     </div>
@@ -390,7 +370,7 @@ export default function CreateQuizPage() {
                             maxScore={parseFloat(maxScore) || 20}
                         />
 
-                        {/* Colonne de droite : Éditeur principal spacieux */}
+                        {/* Colonne de droite : Éditeur de question QCM */}
                         <div className="flex-1 w-full min-w-0">
                             <QuestionDetail
                                 question={selectedQuestion}
@@ -408,12 +388,10 @@ export default function CreateQuizPage() {
                 <div className="bg-amber-50/70 border border-amber-200 text-amber-800 p-4 rounded-lg text-sm flex items-center gap-3">
                     <AlertCircle className="w-5 h-5 text-amber-600 shrink-0" />
                     <span>
-                        Veuillez enregistrer les informations générales de l'évaluation ci-dessus pour pouvoir ajouter et configurer les questions.
+                        Veuillez enregistrer les paramètres de l'épreuve ci-dessus pour accéder à la création des questions QCM à choix unique.
                     </span>
                 </div>
             )}
         </div>
     );
-
 }
-

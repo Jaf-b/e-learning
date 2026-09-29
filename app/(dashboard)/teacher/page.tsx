@@ -157,7 +157,7 @@ export default function TeacherDashboardPage() {
             </div>
 
             {/* ── Contenu principal ── */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
                 {/* Colonne gauche : Cours + Évaluations */}
                 <div className="lg:col-span-2 flex flex-col gap-6">
@@ -245,7 +245,7 @@ export default function TeacherDashboardPage() {
                 </div>
 
                 {/* Colonne droite : Sidebar d'actions & progression */}
-                <div className="flex flex-col gap-5">
+                <div className="grid grid-cols-2 gap-7">
 
                     {/* Carte Actions Rapides */}
                     <Card className="border shadow-xs">

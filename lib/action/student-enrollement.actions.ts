@@ -4,6 +4,8 @@ import { db } from "@/db";
 import { studentEnrollments, creditTransfers, promotions, user } from "@/db/schema";
 import { eq, and, desc } from "drizzle-orm";
 
+import { updateTag, revalidatePath } from "next/cache";
+
 export async function enrollStudent(data: {
     studentId: string;
     promotionId: string;
@@ -36,10 +38,16 @@ export async function enrollStudent(data: {
             })
             .returning();
 
+        updateTag("users");
+        updateTag("promotions");
+        updateTag("admin-dashboard");
+        revalidatePath("/admin/user-management");
+        revalidatePath("/admin");
+
         return { success: true, data: newEnrollment };
-    } catch (error) {
+    } catch (error: any) {
         console.error("Erreur enrollStudent:", error);
-        return { success: false, error: "Échec de l'inscription de l'étudiant." };
+        return { success: false, error: error?.message || "Échec de l'inscription de l'étudiant." };
     }
 }
 export async function updateEnrollmentStatus(
@@ -53,10 +61,16 @@ export async function updateEnrollmentStatus(
             .where(eq(studentEnrollments.id, enrollmentId))
             .returning();
 
+        updateTag("users");
+        updateTag("promotions");
+        updateTag("admin-dashboard");
+        revalidatePath("/admin/user-management");
+        revalidatePath("/admin");
+
         return { success: true, data: updated };
-    } catch (error) {
+    } catch (error: any) {
         console.error("Erreur updateEnrollmentStatus:", error);
-        return { success: false, error: "Impossible de mettre à jour le statut d'inscription." };
+        return { success: false, error: error?.message || "Impossible de mettre à jour le statut d'inscription." };
     }
 }
 export async function getStudentEnrollmentHistory(studentId: string) {

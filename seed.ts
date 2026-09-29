@@ -316,23 +316,39 @@ async function main() {
     // ------------------------------------------------------------------------
     console.log("📊 Attribution des notes...");
 
+    const [assess1] = await db.insert(schema.assessments).values({
+        promotionCourseId: promoCourse1.id,
+        title: "Examen BDD",
+        type: "EXAM",
+        maxScore: "20.00",
+        weight: "1.00",
+    }).returning();
+
+    const [assess2] = await db.insert(schema.assessments).values({
+        promotionCourseId: promoCourse2.id,
+        title: "TP Web",
+        type: "TP",
+        maxScore: "20.00",
+        weight: "1.00",
+    }).returning();
+
     // Notes pour L3-GL
     for (const sId of studentIdsGL) {
         const enrId = enrollmentsMap.get(sId);
-        await db.insert(schema.grades).values([
-            {
-                enrollmentId: enrId,
-                promotionCourseId: promoCourse1.id,
-                score: (Math.random() * 5 + 14).toFixed(2), // 14.00 - 19.00
-                isValidated: true,
-            },
-            {
-                enrollmentId: enrId,
-                promotionCourseId: promoCourse2.id,
-                score: (Math.random() * 6 + 10).toFixed(2), // 10.00 - 16.00
-                isValidated: true,
-            }
-        ]);
+        if (enrId) {
+            await db.insert(schema.grades).values([
+                {
+                    assessmentId: assess1.id,
+                    studentEnrollmentId: enrId,
+                    score: (Math.random() * 5 + 14).toFixed(2),
+                },
+                {
+                    assessmentId: assess2.id,
+                    studentEnrollmentId: enrId,
+                    score: (Math.random() * 6 + 10).toFixed(2),
+                }
+            ]);
+        }
     }
 
     // ------------------------------------------------------------------------

@@ -1,5 +1,6 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
+import { admin } from "better-auth/plugins";
 import {db} from "@/db";
 import * as schema from "@/db/schema";
 import {eq} from "drizzle-orm";
@@ -50,5 +51,5 @@ export const auth = betterAuth({
     },
     //... the rest of your config
     secret: process.env.BETTER_AUTH_SECRET,
-    plugins: [nextCookies()]
+    plugins: [nextCookies(), admin()]
 });

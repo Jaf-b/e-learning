@@ -33,7 +33,7 @@ export default function CourseFilter({ onFilterChange, onFilterReset, filters, d
                 value={filters.name}
                 onChange={(e) => onFilterChange("name", e.target.value)}
             />
-            <Select onValueChange={(value) => onFilterChange("department", value)} value={filters.department}>
+            <Select onValueChange={(value) => value && onFilterChange("department", value)} value={filters.department}>
                 <SelectTrigger className="w-[180px]">
                     <SelectValue placeholder="Department" />
                 </SelectTrigger>
@@ -46,7 +46,7 @@ export default function CourseFilter({ onFilterChange, onFilterReset, filters, d
                     </SelectGroup>
                 </SelectContent>
             </Select>
-            <Select onValueChange={(value) => onFilterChange("promotion", value)} value={filters.promotion}>
+            <Select onValueChange={(value) => value && onFilterChange("promotion", value)} value={filters.promotion}>
                 <SelectTrigger className="w-[180px]">
                     <SelectValue placeholder="Promotion" />
                 </SelectTrigger>

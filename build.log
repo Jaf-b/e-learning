@@ -1,0 +1,54 @@
+npm notice run e-learning@0.1.0 build
+npm notice run next build
+▲ Next.js 16.2.12 (Turbopack)
+- Environments: .env.local
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 58s
+  Running TypeScript ...
+  Finished TypeScript in 36.9s ...
+  Collecting page data using 3 workers ...
+◇ injected env (0) from .env.local // tip: ⌁ auth for agents [www.vestauth.com]
+postgresql://neondb_owner:npg_Bljwkq2FU0Gi@ep-soft-queen-axw2mwsi.c-4.us-east-2.aws.neon.tech/neondb?sslmode=require
+◇ injected env (0) from .env.local // tip: ◈ encrypted .env [www.dotenvx.com]
+postgresql://neondb_owner:npg_Bljwkq2FU0Gi@ep-soft-queen-axw2mwsi.c-4.us-east-2.aws.neon.tech/neondb?sslmode=require
+  Generating static pages using 3 workers (0/19) ...
+  Generating static pages using 3 workers (4/19) 
+  Generating static pages using 3 workers (9/19) 
+  Generating static pages using 3 workers (14/19) 
+◇ injected env (0) from .env.local // tip: ⌘ custom filepath { path: '/custom/path/.env' }
+postgresql://neondb_owner:npg_Bljwkq2FU0Gi@ep-soft-queen-axw2mwsi.c-4.us-east-2.aws.neon.tech/neondb?sslmode=require
+✓ Generating static pages using 3 workers (19/19) in 1819ms
+  Finalizing page optimization ...
+
+Route (app)
+┌ ○ /
+├ ○ /_not-found
+├ ○ /admin
+├ ○ /admin/academic-structure
+├ ○ /admin/courses
+├ ○ /admin/feedback
+├ ○ /admin/user-management
+├ ƒ /api/auth/[...all]
+├ ƒ /api/user
+├ ○ /login
+├ ○ /student
+├ ƒ /student/assessment/[id]
+├ ○ /student/assignement
+├ ○ /student/courses
+├ ƒ /student/courses/[id]
+├ ○ /student/exam
+├ ○ /student/quiz
+├ ○ /teacher
+├ ○ /teacher/courses
+├ ƒ /teacher/courses/[id]
+├ ƒ /teacher/courses/[id]/modules/create
+├ ƒ /teacher/create-quiz/[id]
+└ ○ /teacher/submitted
+
+
+ƒ Proxy (Middleware)
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+

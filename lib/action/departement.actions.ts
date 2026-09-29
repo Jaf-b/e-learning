@@ -1,36 +1,35 @@
 "use server"
 
 import { db } from "@/db";
-import {and, eq, ilike, or} from "drizzle-orm";
-import {departments} from "@/db/schema";
+import { and, asc, eq, ilike, or } from "drizzle-orm";
+import { departments } from "@/db/schema";
+import { unstable_cache, updateTag, revalidatePath } from "next/cache";
 
-// --- GET ALL ---
-export async function getAllDepartments() {
-    try {
-        const result = await db.query.departments.findMany();
-        return { success: true, data: result ?? [] };
-    } catch (error) {
-        console.error("Erreur getAllDepartments:", error);
-        return { success: false, data: [], error: "Erreur de chargement." };
-    }
-}
+// ---------------------------------------------------------------------------
+// Cached reads
+// ---------------------------------------------------------------------------
 
-// --- CREATE ---
-export async function createDepartment(data: { facultyId: string; code: string; name: string }) {
-    try {
-        const [newDept] = await db.insert(departments).values(data).returning();
-        return { success: true, data: newDept };
-    } catch (error) {
-        console.error("Erreur createDepartment:", error);
-        return { success: false, error: "Impossible de créer le département." };
-    }
-}
+export const getAllDepartments = unstable_cache(
+    async () => {
+        try {
+            const result = await db.query.departments.findMany({
+                orderBy: (departments, { asc }) => [asc(departments.name)],
+            });
+            return { success: true, data: result ?? [] };
+        } catch (error) {
+            console.error("Erreur getAllDepartments:", error);
+            return { success: false, data: [], error: "Erreur de chargement des départements." };
+        }
+    },
+    ["departments-all"],
+    { tags: ["academic-structure"], revalidate: 3600 }
+);
 
-// --- READ (Départements d'une faculté spécifique) ---
 export async function getDepartmentsByFaculty(facultyId: string) {
     try {
         const result = await db.query.departments.findMany({
             where: eq(departments.facultyId, facultyId),
+            orderBy: (departments, { asc }) => [asc(departments.name)],
             with: {
                 filieres: true,
             },
@@ -42,34 +41,73 @@ export async function getDepartmentsByFaculty(facultyId: string) {
     }
 }
 
-// --- UPDATE ---
+// ---------------------------------------------------------------------------
+// Mutations
+// ---------------------------------------------------------------------------
+
+export async function createDepartment(data: { facultyId: string; code: string; name: string }) {
+    try {
+        const payload = {
+            facultyId: data.facultyId,
+            code: data.code,
+            name: data.name,
+        };
+        const [newDept] = await db.insert(departments).values(payload).returning();
+        updateTag("academic-structure");
+        updateTag("admin-dashboard");
+        revalidatePath("/admin/academic-structure");
+        revalidatePath("/admin");
+        return { success: true, data: newDept };
+    } catch (error: any) {
+        console.error("Erreur createDepartment:", error);
+        return { success: false, error: error?.message || "Impossible de créer le département." };
+    }
+}
+
 export async function updateDepartment(
     id: string,
     data: Partial<{ facultyId: string; code: string; name: string }>
 ) {
     try {
+        const payload: Record<string, unknown> = {};
+        if (data.facultyId !== undefined) payload.facultyId = data.facultyId;
+        if (data.code !== undefined) payload.code = data.code;
+        if (data.name !== undefined) payload.name = data.name;
+
         const [updated] = await db
             .update(departments)
-            .set(data)
+            .set(payload)
             .where(eq(departments.id, id))
             .returning();
+
+        updateTag("academic-structure");
+        updateTag("admin-dashboard");
+        revalidatePath("/admin/academic-structure");
+        revalidatePath("/admin");
         return { success: true, data: updated };
-    } catch (error) {
+    } catch (error: any) {
         console.error("Erreur updateDepartment:", error);
-        return { success: false, error: "Échec de la mise à jour." };
+        return { success: false, error: error?.message || "Échec de la mise à jour." };
     }
 }
 
-// --- DELETE ---
 export async function deleteDepartment(id: string) {
     try {
         const [deleted] = await db.delete(departments).where(eq(departments.id, id)).returning();
+        updateTag("academic-structure");
+        updateTag("admin-dashboard");
+        revalidatePath("/admin/academic-structure");
+        revalidatePath("/admin");
         return { success: true, data: deleted };
-    } catch (error) {
+    } catch (error: any) {
         console.error("Erreur deleteDepartment:", error);
-        return { success: false, error: "Impossible de supprimer le département." };
+        return { success: false, error: "Impossible de supprimer le département. Des filières y sont peut-être rattachées." };
     }
 }
+
+// ---------------------------------------------------------------------------
+// Search helper (not cached — real-time search)
+// ---------------------------------------------------------------------------
 
 export async function searchDepartments(searchTerm: string, facultyId?: string) {
     try {
@@ -79,13 +117,11 @@ export async function searchDepartments(searchTerm: string, facultyId?: string) 
 
         const query = searchTerm.trim();
 
-        // Condition de texte : correspond au code OU au nom
         const textMatch = or(
             ilike(departments.name, `%${query}%`),
             ilike(departments.code, `%${query}%`)
         );
 
-        // Si facultyId est fourni, on combine avec AND
         const whereClause = facultyId
             ? and(eq(departments.facultyId, facultyId), textMatch)
             : textMatch;
@@ -93,8 +129,8 @@ export async function searchDepartments(searchTerm: string, facultyId?: string) 
         const result = await db.query.departments.findMany({
             where: whereClause,
             with: {
-                faculty: true, // Inclut les infos de la faculté parente
-                filieres: true, // Inclut les filières rattachées
+                faculty: true,
+                filieres: true,
             },
         });
 

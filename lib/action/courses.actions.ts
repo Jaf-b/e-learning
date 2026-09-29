@@ -15,7 +15,7 @@ import {
 import { StudentRecord, AssessmentRecord, StudentGradeOverview } from "@/types/academic";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { Course } from "@/lib/types";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, unstable_cache, updateTag } from "next/cache";
 
 interface UpdateStudentCourseGradesParams {
   studentEnrollmentId: string;
@@ -25,20 +25,49 @@ interface UpdateStudentCourseGradesParams {
   examScore?: number | null;
 }
 
-export async function getAllCourses() {
-  try {
-    const result = await db.query.courses.findMany({
-      with: {
-        author: true,
-        modules: true,
-      },
-    });
-    return { success: true, data: result ?? [] };
-  } catch (error) {
-    console.error("Erreur getAllCourses:", error);
-    return { success: false, data: [], error: "Erreur de chargement." };
-  }
-}
+export const getAllCourses = unstable_cache(
+  async () => {
+    try {
+      const result = await db.query.courses.findMany({
+        orderBy: (courses, { desc }) => [desc(courses.createdAt)],
+        with: {
+          author: {
+            columns: {
+              id: true,
+              name: true,
+              email: true,
+              image: true,
+            },
+          },
+          modules: {
+            columns: {
+              id: true,
+              title: true,
+              order: true,
+            },
+            with: {
+              lessons: {
+                columns: {
+                  id: true,
+                  title: true,
+                  order: true,
+                },
+              },
+            },
+          },
+          filiere: true,
+          degreeLevel: true,
+        },
+      });
+      return { success: true, data: result ?? [] };
+    } catch (error) {
+      console.error("Erreur getAllCourses:", error);
+      return { success: false, data: [], error: "Erreur de chargement." };
+    }
+  },
+  ["courses-all"],
+  { tags: ["courses"], revalidate: 3600 }
+);
 
 export async function getCoursesByuserID(id: string) {
   try {
@@ -57,25 +86,83 @@ export async function getCoursesByuserID(id: string) {
 
 export async function createCourse(data: any) {
   try {
-    const [newCourse] = await db.insert(courses).values(data).returning();
+    const payload = {
+      filiereId: data.filiereId,
+      degreeLevelId: data.degreeLevelId,
+      code: data.code,
+      title: data.title,
+      description: data.description || null,
+      credits: Number(data.credits) || 0,
+      status: data.status || "DRAFT",
+      authorId: data.authorId,
+      rejectionReason: data.rejectionReason || null,
+    };
+    const [newCourse] = await db.insert(courses).values(payload).returning();
+
+    updateTag("courses");
+    updateTag("admin-dashboard");
+    revalidatePath("/admin/courses");
+    revalidatePath("/admin");
+
     return { success: true, data: newCourse };
-  } catch (error) {
+  } catch (error: any) {
     console.error("Erreur createCourse:", error);
-    return { success: false, error: "Impossible de créer le cours." };
+    return { success: false, error: error?.message || "Impossible de créer le cours." };
   }
 }
 
 export async function updateCourse(id: string, data: any) {
   try {
+    const payload: any = {
+      updatedAt: new Date(),
+    };
+    if (data.filiereId !== undefined) payload.filiereId = data.filiereId;
+    if (data.degreeLevelId !== undefined) payload.degreeLevelId = data.degreeLevelId;
+    if (data.code !== undefined) payload.code = data.code;
+    if (data.title !== undefined) payload.title = data.title;
+    if (data.description !== undefined) payload.description = data.description;
+    if (data.credits !== undefined) payload.credits = Number(data.credits);
+    if (data.status !== undefined) payload.status = data.status;
+    if (data.authorId !== undefined) payload.authorId = data.authorId;
+    if (data.rejectionReason !== undefined) payload.rejectionReason = data.rejectionReason;
+
     const [updated] = await db
       .update(courses)
-      .set(data)
+      .set(payload)
       .where(eq(courses.id, id))
       .returning();
+
+    updateTag("courses");
+    updateTag("admin-dashboard");
+    revalidatePath("/admin/courses");
+    revalidatePath("/admin");
+
     return { success: true, data: updated };
-  } catch (error) {
+  } catch (error: any) {
     console.error("Erreur updateCourse:", error);
-    return { success: false, error: "Échec de la mise à jour." };
+    return { success: false, error: error?.message || "Échec de la mise à jour." };
+  }
+}
+
+export async function deleteCourse(id: string) {
+  try {
+    const [deleted] = await db
+      .delete(courses)
+      .where(eq(courses.id, id))
+      .returning();
+
+    updateTag("courses");
+    updateTag("admin-dashboard");
+    revalidatePath("/admin/courses");
+    revalidatePath("/admin");
+
+    return { success: true, data: deleted };
+  } catch (error: any) {
+    console.error("Erreur deleteCourse:", error);
+    return {
+      success: false,
+      error: error?.message || "Impossible de supprimer ce cours. Des promotions ou éléments y sont peut-être rattachés.",
+    };
   }
 }
 

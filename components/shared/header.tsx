@@ -17,14 +17,17 @@ interface HeaderProps {
   description: string
   buttonText?: string
   buttonLink?: string
+  linkHref?: string
 }
 
 export default function Header({
   title,
   description,
-    buttonText,
-    buttonLink,
+  buttonText,
+  buttonLink,
+  linkHref,
 }: HeaderProps) {
+  const targetLink = buttonLink || linkHref;
   return (
     <Card className="w-full" >
       <div className="flex items-center gap-6 px-3">
@@ -37,12 +40,12 @@ export default function Header({
           </CardHeader>
         </div>
 
-          {buttonText && buttonLink && (
+          {targetLink && (buttonText || linkHref) && (
               <CardAction className=" flex flex-1 shrink-0  items-center justify-end">
-                  <Link href={buttonLink}>
+                  <Link href={targetLink}>
                       <Button className="p-5 rounded-3xl">
                           <Plus className="mr-2"/>
-                          {buttonText}
+                          {buttonText || "Accéder"}
                       </Button>
                   </Link>
               </CardAction>

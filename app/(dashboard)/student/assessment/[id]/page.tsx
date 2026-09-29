@@ -6,9 +6,11 @@ import { getStudentAssessmentDetails } from "@/lib/action/student.actions";
 import { AssessmentTakingCard } from "@/components/student/assessment-taking-card";
 import { TpSubmissionCard } from "@/components/student/tp-submission-card";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Lock, Calendar } from "lucide-react";
 import Link from "next/link";
+import { isAssessmentAvailable } from "@/lib/utils";
 
 export default function StudentAssessmentPage() {
   const params = useParams();
@@ -57,6 +59,10 @@ export default function StudentAssessmentPage() {
   const isTp = assessment.type === "TP" || assessment.type === "ASSIGNMENT";
   const courseId = assessment.promotionCourse?.courseId;
 
+  // Verification de la date de disponibilité de l'épreuve
+  const avail = isAssessmentAvailable(assessment.dueDate);
+  const isLockedForFuture = !existingGrade && avail.isFuture;
+
   return (
     <div className="p-6 space-y-6 max-w-5xl mx-auto">
       <div>
@@ -69,7 +75,32 @@ export default function StudentAssessmentPage() {
         </Link>
       </div>
 
-      {isTp ? (
+      {isLockedForFuture ? (
+        <Card className="p-8 text-center max-w-xl mx-auto border-amber-500/30 bg-amber-50/30 dark:bg-amber-950/20">
+          <CardHeader>
+            <div className="w-14 h-14 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center mx-auto mb-3">
+              <Lock className="w-7 h-7" />
+            </div>
+            <CardTitle className="text-xl font-bold text-foreground">
+              Épreuve non ouverte
+            </CardTitle>
+            <CardDescription className="text-sm mt-1">
+              Cette évaluation est programmée pour le{" "}
+              <span className="font-semibold text-foreground">{avail.formattedDate}</span>.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-xs text-muted-foreground">
+              L'examen ouvrira automatiquement le jour prévu. Veuillez vous reconnecter à la date indiquée pour composer.
+            </p>
+            <Link href="/student">
+              <Button variant="outline" className="mt-2">
+                <ArrowLeft className="w-4 h-4 mr-2" /> Retour à mes cours
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+      ) : isTp ? (
         <TpSubmissionCard
           assessment={assessment}
           existingGrade={existingGrade}
