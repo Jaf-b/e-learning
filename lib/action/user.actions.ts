@@ -38,13 +38,15 @@ export async function createUser(data: string) {
 
         // ✅ Utiliser createUser via l'API Admin au lieu de signUpEmail
         // Cet appel crée le compte SANS modifier les cookies de session de l'admin
-        const newUser = await auth.api.createUser({
+        const createdUserResponse = await auth.api.createUser({
             body: {
                 ...userData,
                 password: password, // Mot de passe du nouvel utilisateur
                 role: userData.role || "STUDENT",
             },
         });
+
+        const newUser = "user" in createdUserResponse ? createdUserResponse.user : createdUserResponse;
 
         if (newUser && enrollment && enrollment.promotionId) {
             await enrollStudent({

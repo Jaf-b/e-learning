@@ -10,7 +10,7 @@ import {
   DialogTrigger,
   DialogClose,
 } from "@/components/ui/dialog";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -26,12 +26,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { toast } from "@/components/ui/toast";
 import { createUser, updateUser } from "@/lib/action/user.actions";
-import { getFacultiesWithTree } from "@/lib/action/faculty.actions";
-import { getAllDepartments } from "@/lib/action/departement.actions";
-import { getAllFilieres } from "@/lib/action/filieres.actions";
-import { getPromotions } from "@/lib/action/promotions.actions";
-import { getAllDegrees, getAllDegreeLevels } from "@/lib/action/degree.actions";
-import { getAcademicYears } from "@/lib/action/academic-years.actions";
+import { getUserFormOptions } from "@/lib/action/user-form-options.actions";
 import {
   User,
   Faculty,
@@ -67,10 +62,9 @@ interface DialogDataCache {
   degrees: Degree[];
   degreeLevels: DegreeLevel[];
   academicYears: AcademicYear[];
-  isLoaded: boolean;
 }
 
-const dataCache: DialogDataCache = {
+const emptyOptions: DialogDataCache = {
   faculties: [],
   departments: [],
   filieres: [],
@@ -78,7 +72,6 @@ const dataCache: DialogDataCache = {
   degrees: [],
   degreeLevels: [],
   academicYears: [],
-  isLoaded: false,
 };
 
 const formSchema = z.object({
@@ -106,7 +99,7 @@ export default function AddUserDialog({ user, children, onSuccess }: AddUserDial
   const [submitting, setSubmitting] = useState(false);
   const [loadingData, setLoadingData] = useState(false);
 
-  const [options, setOptions] = useState<DialogDataCache>(dataCache);
+  const [options, setOptions] = useState<DialogDataCache>(emptyOptions);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -130,50 +123,20 @@ export default function AddUserDialog({ user, children, onSuccess }: AddUserDial
 
   // 1. LAZY LOADING : Charger les données uniquement quand la boîte de dialogue s'ouvre
   const loadSelectData = useCallback(async () => {
-    if (dataCache.isLoaded) {
-      setOptions(dataCache);
-      return;
-    }
-
     setLoadingData(true);
     try {
-      const [
-        facultiesRes,
-        departmentsRes,
-        filieresRes,
-        promotionsRes,
-        degreesRes,
-        degreeLevelsRes,
-        academicYearsRes,
-      ] = await Promise.all([
-        getFacultiesWithTree(),
-        getAllDepartments(),
-        getAllFilieres(),
-        getPromotions(),
-        getAllDegrees(),
-        getAllDegreeLevels(),
-        getAcademicYears(),
-      ]);
-
-      const fetchedData: DialogDataCache = {
-        faculties: facultiesRes.success ? facultiesRes.data || [] : [],
-        departments: departmentsRes.success ? departmentsRes.data || [] : [],
-        filieres: filieresRes.success ? filieresRes.data || [] : [],
-        promotions: promotionsRes.success ? promotionsRes.data || [] : [],
-        degrees: degreesRes.success ? degreesRes.data || [] : [],
-        degreeLevels: degreeLevelsRes.success ? degreeLevelsRes.data || [] : [],
-        academicYears: academicYearsRes.success ? academicYearsRes.data || [] : [],
-        isLoaded: true,
-      };
-
-      // Mettre à jour le cache et le state local
-      Object.assign(dataCache, fetchedData);
-      setOptions(fetchedData);
+      const response = await getUserFormOptions();
+      if (!response.success) {
+        throw new Error(response.error);
+      }
+      setOptions(response.data);
     } catch (error) {
       console.error("Erreur lors du chargement des sélecteurs:", error);
       toast.add({
         type: "error",
-        description: "Erreur de chargement des options de formulaire.",
+        description: error instanceof Error
+            ? error.message
+            : "Erreur de chargement des options de formulaire.",
       });
     } finally {
       setLoadingData(false);
@@ -198,14 +161,16 @@ export default function AddUserDialog({ user, children, onSuccess }: AddUserDial
   }, [departmentId, options.filieres]);
 
   // Handlers pour réinitialiser les sélections dépendantes lors d'un changement utilisateur
-  const handleFacultySelect = (value: string) => {
-    form.setValue("facultyId", value);
+  const handleFacultySelect = (value: string | null) => {
+    const safeValue = value ?? "";
+    form.setValue("facultyId", safeValue);
     form.setValue("departmentId", "");
     form.setValue("filiereId", "");
   };
 
-  const handleDepartmentSelect = (value: string) => {
-    form.setValue("departmentId", value);
+  const handleDepartmentSelect = (value: string | null) => {
+    const safeValue = value ?? "";
+    form.setValue("departmentId", safeValue);
     form.setValue("filiereId", "");
   };
 
@@ -265,12 +230,14 @@ export default function AddUserDialog({ user, children, onSuccess }: AddUserDial
 
   return (
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogTrigger className={buttonVariants({ variant: "default", size: "lg" })}>
+        <DialogTrigger asChild>
           {children || (
-              <span className="flex items-center gap-2">
-            {isEditing ? <Pencil className="w-4 h-4" /> : <UserPlus className="w-4 h-4" />}
-                {isEditing ? "Modifier" : "Ajouter un Utilisateur"}
-          </span>
+              <Button size="lg">
+                <span className="flex items-center gap-2">
+                  {isEditing ? <Pencil className="w-4 h-4" /> : <UserPlus className="w-4 h-4" />}
+                  {isEditing ? "Modifier" : "Ajouter un Utilisateur"}
+                </span>
+              </Button>
           )}
         </DialogTrigger>
         <DialogContent className="sm:max-w-lg max-h-[90vh] flex flex-col p-0 gap-0">
@@ -299,13 +266,6 @@ export default function AddUserDialog({ user, children, onSuccess }: AddUserDial
               className="flex flex-col flex-1 overflow-hidden"
           >
             <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
-              {loadingData ? (
-                  <div className="flex flex-col items-center justify-center py-12 space-y-3">
-                    <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                    <p className="text-xs text-muted-foreground">Chargement des options...</p>
-                  </div>
-              ) : (
-                  <>
                     {/* ── Informations Générales ── */}
                     <div className="space-y-4">
                       <h4 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
@@ -384,7 +344,10 @@ export default function AddUserDialog({ user, children, onSuccess }: AddUserDial
                                     <ShieldCheck className="w-3.5 h-3.5 text-muted-foreground" />
                                     Rôle
                                   </FieldLabel>
-                                  <Select onValueChange={field.onChange}  defaultValue={field.value}>
+                                  <Select
+                                      onValueChange={field.onChange}
+                                      value={field.value ?? "STUDENT"}
+                                  >
                                     <SelectTrigger aria-invalid={fieldState.invalid} className="text-xs">
                                       <SelectValue placeholder="Sélectionner un rôle" />
                                     </SelectTrigger>
@@ -429,6 +392,7 @@ export default function AddUserDialog({ user, children, onSuccess }: AddUserDial
                                             handleFacultySelect(val);
                                           }}
                                           value={field.value ?? ""}
+                                          disabled={loadingData}
                                       >
                                         <SelectTrigger aria-invalid={fieldState.invalid} className="text-xs">
                                           <SelectValue placeholder="Choisir une faculté" />
@@ -463,7 +427,7 @@ export default function AddUserDialog({ user, children, onSuccess }: AddUserDial
                                             handleDepartmentSelect(val);
                                           }}
                                           value={field.value ??""}
-                                          disabled={!facultyId}
+                                          disabled={loadingData || !facultyId}
                                       >
                                         <SelectTrigger aria-invalid={fieldState.invalid} className="text-xs">
                                           <SelectValue placeholder="Choisir un département" />
@@ -497,8 +461,8 @@ export default function AddUserDialog({ user, children, onSuccess }: AddUserDial
                                       </FieldLabel>
                                       <Select
                                           onValueChange={field.onChange}
-                                          value={field.value}
-                                          disabled={!departmentId}
+                                          value={field.value ?? ""}
+                                          disabled={loadingData || !departmentId}
                                       >
                                         <SelectTrigger aria-invalid={fieldState.invalid} className="text-xs">
                                           <SelectValue placeholder="Choisir une filière" />
@@ -529,8 +493,8 @@ export default function AddUserDialog({ user, children, onSuccess }: AddUserDial
                                       </FieldLabel>
                                       <Select
                                           onValueChange={field.onChange}
-                                          value={field.value}
-                                          disabled={!form.watch("filiereId")}
+                                          value={field.value ?? ""}
+                                          disabled={loadingData || !form.watch("filiereId")}
                                       >
                                         <SelectTrigger aria-invalid={fieldState.invalid} className="text-xs">
                                           <SelectValue placeholder="Choisir une promotion" />
@@ -564,8 +528,8 @@ export default function AddUserDialog({ user, children, onSuccess }: AddUserDial
                                       </FieldLabel>
                                       <Select
                                           onValueChange={field.onChange}
-                                          value={field.value}
-                                          disabled={!form.watch("promotionId")}
+                                          value={field.value ?? ""}
+                                          disabled={loadingData || !form.watch("promotionId")}
                                       >
                                         <SelectTrigger aria-invalid={fieldState.invalid} className="text-xs">
                                           <SelectValue placeholder="Choisir un diplôme" />
@@ -596,8 +560,8 @@ export default function AddUserDialog({ user, children, onSuccess }: AddUserDial
                                       </FieldLabel>
                                       <Select
                                           onValueChange={field.onChange}
-                                          value={field.value}
-                                          disabled={!form.watch("degreeId")}
+                                          value={field.value ?? ""}
+                                          disabled={loadingData || !form.watch("degreeId")}
                                       >
                                         <SelectTrigger aria-invalid={fieldState.invalid} className="text-xs">
                                           <SelectValue placeholder="Choisir un niveau" />
@@ -630,8 +594,8 @@ export default function AddUserDialog({ user, children, onSuccess }: AddUserDial
                                     </FieldLabel>
                                     <Select
                                         onValueChange={field.onChange}
-                                        value={field.value}
-                                        disabled={!form.watch("promotionId")}
+                                        value={field.value ?? ""}
+                                        disabled={loadingData || !form.watch("promotionId")}
                                     >
                                       <SelectTrigger aria-invalid={fieldState.invalid} className="text-xs">
                                         <SelectValue placeholder="Choisir une année académique" />
@@ -652,8 +616,6 @@ export default function AddUserDialog({ user, children, onSuccess }: AddUserDial
                           />
                         </div>
                     )}
-                  </>
-              )}
             </div>
 
             {/* Sticky Footer */}
@@ -665,7 +627,7 @@ export default function AddUserDialog({ user, children, onSuccess }: AddUserDial
               >
                 Annuler
               </DialogClose>
-              <Button type="submit" size="sm" className="text-xs gap-1.5" disabled={submitting || loadingData}>
+              <Button type="submit" size="sm" className="text-xs gap-1.5" disabled={submitting}>
                 {submitting ? (
                     <>
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />

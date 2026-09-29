@@ -85,6 +85,9 @@ async function main() {
             email: u.email,
             role: u.role,
             emailVerified: true,
+            banned: false,
+            banReason: null,
+            banExpires: null,
             isActive: true,
             image: `https://api.dicebear.com/7.x/avataaars/svg?seed=${u.name.replace(/\s+/g, '')}`,
         }).returning();

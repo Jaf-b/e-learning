@@ -248,19 +248,10 @@ export default function CourseDetailsPage() {
                 <Accordion className="w-full">
                   {course.modules.map((module: any, modIdx: number) => (
                     <AccordionItem key={module.id} value={module.id}>
-                      <AccordionTrigger className="font-semibold text-base px-4 py-3 hover:no-underline">
-                        <div className="flex items-center justify-between w-full pr-4">
-                          <div className="flex items-center gap-3">
-                            <span className="w-6 h-6 rounded-full bg-primary/10 text-primary text-xs flex items-center justify-center font-bold">
-                              {modIdx + 1}
-                            </span>
-                            <span>{module.title}</span>
-                            <Badge variant="secondary" className="text-xs">
-                              {module.lessons?.length || 0} leçon(s)
-                            </Badge>
-                          </div>
-
-                          <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                      <AccordionTrigger
+                        className="font-semibold text-base px-4 py-3 hover:no-underline"
+                        actions={
+                          <div className="flex items-center gap-2 pr-4">
                             <Button
                               size="sm"
                               variant="outline"
@@ -285,6 +276,18 @@ export default function CourseDetailsPage() {
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </Button>
+                          </div>
+                        }
+                      >
+                        <div className="flex items-center justify-between w-full pr-4">
+                          <div className="flex items-center gap-3">
+                            <span className="w-6 h-6 rounded-full bg-primary/10 text-primary text-xs flex items-center justify-center font-bold">
+                              {modIdx + 1}
+                            </span>
+                            <span>{module.title}</span>
+                            <Badge variant="secondary" className="text-xs">
+                              {module.lessons?.length || 0} leçon(s)
+                            </Badge>
                           </div>
                         </div>
                       </AccordionTrigger>

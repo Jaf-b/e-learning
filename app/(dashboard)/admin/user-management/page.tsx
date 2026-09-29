@@ -5,11 +5,8 @@ import Header from "@/components/shared/header";
 import UserList from "@/components/shared/user-list";
 import StudentList from "@/components/shared/student-list";
 import AddUserDialog from "@/components/shared/add-user-dialog";
-import StudentDialog from "@/components/shared/student-dialog";
 import { getAllUsers } from "@/lib/action/user.actions";
-import { getPromotions } from "@/lib/action/promotions.actions";
-import { enrollStudent } from "@/lib/action/student-enrollement.actions";
-import { User, Promotion } from "@/types";
+import { User } from "@/types";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Users, BookOpen, GraduationCap, ShieldCheck, Search, Plus, RefreshCw } from "lucide-react";
@@ -22,23 +19,16 @@ export default function UserManagementPage() {
   const [role, setRole] = useState<RoleFilter>("ALL");
   const [searchQuery, setSearchQuery] = useState("");
   const [users, setUsers] = useState<User[]>([]);
-  const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   // 1. Stabilisation de la fonction d'acquisition de données
   const loadData = useCallback(async () => {
     try {
-      const [usersResponse, promotionsResponse] = await Promise.all([
-        getAllUsers(),
-        getPromotions(),
-      ]);
+      const usersResponse = await getAllUsers();
 
       if (usersResponse.success) {
         setUsers(usersResponse.data || []);
-      }
-      if (promotionsResponse.success) {
-        setPromotions(promotionsResponse.data || []);
       }
     } catch (error) {
       console.error("Error loading user management data:", error);
@@ -58,16 +48,6 @@ export default function UserManagementPage() {
     setRefreshing(true);
     await loadData();
     toast.add({ type: "success", description: "Liste des utilisateurs actualisée." });
-  };
-
-  const handleEnrollStudent = async (enrollment: { studentId: string; promotionId: string }) => {
-    const response = await enrollStudent(enrollment);
-    if (response.success) {
-      toast.add({ type: "success", description: "Inscription de l'étudiant enregistrée avec succès." });
-      await loadData();
-    } else {
-      toast.add({ type: "error", description: response.error || "Échec de l'inscription." });
-    }
   };
 
   // 3. Mémorisation des statistiques (calcul unique par changement du tableau `users`)
@@ -117,7 +97,6 @@ export default function UserManagementPage() {
               <RefreshCw className={cn("w-3.5 h-3.5", (refreshing || loading) && "animate-spin")} />
               Rafraîchir
             </Button>
-            <StudentDialog promotions={promotions} onSave={handleEnrollStudent} />
             <AddUserDialog onSuccess={loadData}>
               <Button className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold shadow-xs">
                 <Plus className="w-4 h-4" />
