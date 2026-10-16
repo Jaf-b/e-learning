@@ -11,9 +11,12 @@ import {
   promotionCourses,
   modules,
   lessons,
+  questions,
+  studentResponses,
 } from "@/db/schema";
 import { StudentRecord, AssessmentRecord, StudentGradeOverview } from "@/types/academic";
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { TpSubmissionRecord } from "@/lib/types";
+import { and, asc, eq, inArray, desc } from "drizzle-orm";
 import { Course } from "@/lib/types";
 import { revalidatePath, unstable_cache, updateTag } from "next/cache";
 
@@ -96,6 +99,9 @@ export async function createCourse(data: any) {
       status: data.status || "DRAFT",
       authorId: data.authorId,
       rejectionReason: data.rejectionReason || null,
+      videoUrl: data.videoUrl || null,
+      syllabus: data.syllabus || null,
+      syllabusUrl: data.syllabusUrl || null,
     };
     const [newCourse] = await db.insert(courses).values(payload).returning();
 
@@ -103,6 +109,7 @@ export async function createCourse(data: any) {
     updateTag("admin-dashboard");
     revalidatePath("/admin/courses");
     revalidatePath("/admin");
+    revalidatePath("/teacher/courses");
 
     return { success: true, data: newCourse };
   } catch (error: any) {
@@ -125,6 +132,9 @@ export async function updateCourse(id: string, data: any) {
     if (data.status !== undefined) payload.status = data.status;
     if (data.authorId !== undefined) payload.authorId = data.authorId;
     if (data.rejectionReason !== undefined) payload.rejectionReason = data.rejectionReason;
+    if (data.videoUrl !== undefined) payload.videoUrl = data.videoUrl;
+    if (data.syllabus !== undefined) payload.syllabus = data.syllabus;
+    if (data.syllabusUrl !== undefined) payload.syllabusUrl = data.syllabusUrl;
 
     const [updated] = await db
       .update(courses)
@@ -136,11 +146,50 @@ export async function updateCourse(id: string, data: any) {
     updateTag("admin-dashboard");
     revalidatePath("/admin/courses");
     revalidatePath("/admin");
+    revalidatePath(`/teacher/courses/${id}`);
+    revalidatePath("/teacher/courses");
+    revalidatePath(`/student/courses/${id}`);
 
     return { success: true, data: updated };
   } catch (error: any) {
     console.error("Erreur updateCourse:", error);
     return { success: false, error: error?.message || "Échec de la mise à jour." };
+  }
+}
+
+export async function updateCourseContent(
+  courseId: string,
+  data: {
+    videoUrl?: string | null;
+    syllabus?: string | null;
+    syllabusUrl?: string | null;
+    description?: string | null;
+  }
+) {
+  try {
+    const payload: any = {
+      updatedAt: new Date(),
+    };
+    if (data.videoUrl !== undefined) payload.videoUrl = data.videoUrl || null;
+    if (data.syllabus !== undefined) payload.syllabus = data.syllabus || null;
+    if (data.syllabusUrl !== undefined) payload.syllabusUrl = data.syllabusUrl || null;
+    if (data.description !== undefined) payload.description = data.description || null;
+
+    const [updated] = await db
+      .update(courses)
+      .set(payload)
+      .where(eq(courses.id, courseId))
+      .returning();
+
+    updateTag("courses");
+    revalidatePath(`/teacher/courses/${courseId}`);
+    revalidatePath(`/student/courses/${courseId}`);
+    revalidatePath("/teacher/courses");
+
+    return { success: true, data: updated };
+  } catch (error: any) {
+    console.error("Erreur updateCourseContent:", error);
+    return { success: false, error: error?.message || "Échec de la mise à jour du contenu du cours." };
   }
 }
 
@@ -665,3 +714,130 @@ export async function deleteLesson(id: string) {
     return { success: false, error: "Impossible de supprimer la leçon." };
   }
 }
+
+/**
+ * Fetch all TP/ASSIGNMENT submissions for a given course (teacher view).
+ * Returns each grade record enriched with the student's textAnswer and fileUrl.
+ */
+export async function getTpSubmissionsByCourseId(courseId: string): Promise<TpSubmissionRecord[]> {
+  if (!courseId) return [];
+
+  // 1. Find all promotionCourse rows for this course
+  const pCourses = await db.query.promotionCourses.findMany({
+    where: eq(promotionCourses.courseId, courseId),
+    columns: { id: true },
+  });
+  const pCourseIds = pCourses.map((pc) => pc.id);
+  if (pCourseIds.length === 0) return [];
+
+  // 2. Find only TP / ASSIGNMENT assessments
+  const tpAssessments = await db.query.assessments.findMany({
+    where: and(
+      inArray(assessments.promotionCourseId, pCourseIds),
+      inArray(assessments.type, ["TP", "ASSIGNMENT"] as any)
+    ),
+    with: { questions: { columns: { id: true } } },
+    orderBy: (a, { desc }) => [desc(a.createdAt)],
+  });
+  if (tpAssessments.length === 0) return [];
+
+  const assessmentIds = tpAssessments.map((a) => a.id);
+  const assessmentMap = new Map(tpAssessments.map((a) => [a.id, a]));
+
+  // 3. Fetch all grades for these assessments (each grade = one submitted student)
+  const gradeRows = await db.query.grades.findMany({
+    where: inArray(grades.assessmentId, assessmentIds),
+    with: {
+      studentEnrollment: {
+        with: {
+          student: {
+            columns: { id: true, name: true, email: true, image: true },
+          },
+        },
+      },
+    },
+    orderBy: (g, { desc }) => [desc(g.gradedAt)],
+  });
+
+  // 4. For each grade, find the corresponding textAnswer / fileUrl from student_responses
+  const results: TpSubmissionRecord[] = [];
+
+  for (const grade of gradeRows) {
+    const assessment = assessmentMap.get(grade.assessmentId);
+    if (!assessment) continue;
+
+    const questionIds = assessment.questions.map((q) => q.id);
+    let textAnswer: string | null = null;
+    let fileUrl: string | null = null;
+    let responseId: string | null = null;
+    let submittedAt: Date = grade.gradedAt ?? new Date();
+
+    if (questionIds.length > 0) {
+      const responseRow = await db.query.studentResponses.findFirst({
+        where: and(
+          eq(studentResponses.studentEnrollmentId, grade.studentEnrollmentId),
+          inArray(studentResponses.questionId, questionIds)
+        ),
+        orderBy: (r, { desc }) => [desc(r.submittedAt)],
+      });
+      if (responseRow) {
+        textAnswer = responseRow.textAnswer ?? null;
+        fileUrl = (responseRow as any).fileUrl ?? null;
+        responseId = responseRow.id;
+        submittedAt = responseRow.submittedAt;
+      }
+    }
+
+    const enrollment = grade.studentEnrollment as any;
+    results.push({
+      id: grade.id,
+      gradeId: grade.id,
+      responseId,
+      assessmentId: grade.assessmentId,
+      assessmentTitle: assessment.title,
+      assessmentType: assessment.type,
+      maxScore: Number(assessment.maxScore),
+      dueDate: assessment.dueDate ? String(assessment.dueDate) : null,
+      studentEnrollmentId: grade.studentEnrollmentId,
+      studentId: enrollment?.student?.id ?? "",
+      studentName: enrollment?.student?.name ?? "Inconnu",
+      studentEmail: enrollment?.student?.email ?? "",
+      studentImage: enrollment?.student?.image ?? null,
+      textAnswer,
+      fileUrl,
+      submittedAt,
+      score: grade.score !== null ? Number(grade.score) : null,
+      feedback: grade.feedback ?? null,
+      isGraded: grade.score !== null,
+    });
+  }
+
+  return results;
+}
+
+/**
+ * Teacher grades a TP submission — updates the grade row with score + feedback.
+ */
+export async function gradeSubmission(data: {
+  gradeId: string;
+  score: number;
+  feedback?: string;
+  courseId: string;
+}) {
+  try {
+    await db
+      .update(grades)
+      .set({
+        score: String(data.score),
+        feedback: data.feedback ?? null,
+        gradedAt: new Date(),
+      })
+      .where(eq(grades.id, data.gradeId));
+
+    revalidatePath(`/teacher/courses/${data.courseId}`);
+    return { success: true };
+  } catch (error) {
+    console.error("Erreur gradeSubmission:", error);
+    return { success: false, error: "Impossible d'enregistrer la note." };
+  }
+}

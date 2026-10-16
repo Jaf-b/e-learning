@@ -490,6 +490,7 @@ export async function submitAssessmentAnswers(data: {
 export async function submitTpAssignment(data: {
   assessmentId: string;
   submissionContent: string;
+  fileUrl?: string | null;
 }) {
   try {
     const currentUser = await getCurrentUser();
@@ -558,6 +559,7 @@ export async function submitTpAssignment(data: {
       studentEnrollmentId: enrollment.id,
       questionId: targetQuestionId,
       textAnswer: data.submissionContent,
+      fileUrl: data.fileUrl || null,
     });
 
     // Record or update Grade (initially pending teacher score or recorded)

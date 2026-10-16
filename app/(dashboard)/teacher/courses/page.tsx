@@ -54,10 +54,10 @@ const TeacherCoursesPage = () => {
 
   return (
     <div className="flex flex-col gap-6 p-6">
-      {/* Header avec action */}
+      {/* Header */}
       <Header
         title="Mes Cours"
-        description="Gérez vos enseignements, concevez de nouveaux modules et suivez l'avancement pédagogique."
+        description="Gérez les contenus pédagogiques de vos cours (vidéos, syllabus, leçons et TP) et suivez l'avancement de vos étudiants."
       />
 
       {/* Barre de Filtres et Statistiques */}
@@ -113,10 +113,11 @@ const TeacherCoursesPage = () => {
       ) : (
         <CourseList
           courses={filteredCourses}
+          actionLabel="Gérer le contenu"
           emptyMessage={
             searchQuery || statusFilter !== "ALL"
               ? "Aucun cours ne correspond à vos critères de recherche."
-              : "Vous n'avez pas encore créé de cours. Cliquez sur 'Créer un cours' pour commencer."
+              : "Aucun cours ne vous a été assigné pour le moment. Veuillez contacter l'administration académique pour l'attribution de vos cours."
           }
         />
       )}

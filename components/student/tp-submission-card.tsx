@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import {
   Card,
   CardContent,
@@ -24,6 +24,9 @@ import {
   ChevronDown,
   ChevronUp,
   Lock,
+  FileText,
+  X,
+  Paperclip,
 } from "lucide-react";
 import { isAssessmentAvailable } from "@/lib/utils";
 
@@ -65,12 +68,14 @@ interface TpSubmissionCardProps {
     gradedAt: Date | string | null;
   } | null;
   existingResponseText?: string | null;
+  existingFileUrl?: string | null;
 }
 
 export function TpSubmissionCard({
   assessment,
   existingGrade,
   existingResponseText = "",
+  existingFileUrl = null,
 }: TpSubmissionCardProps) {
   const questions = assessment.questions ?? [];
   const hasQuestions = questions.length > 0;
@@ -87,6 +92,13 @@ export function TpSubmissionCard({
     questions[0]?.id ?? null
   );
 
+  // File upload state
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploadedFileUrl, setUploadedFileUrl] = useState<string | null>(existingFileUrl);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+
   const avail = isAssessmentAvailable(assessment.dueDate);
   const isLockedForFuture = !isSubmitted && avail.isFuture;
 
@@ -95,13 +107,46 @@ export function TpSubmissionCard({
     setAnswers((prev) => ({ ...prev, [questionId]: value }));
   };
 
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setSelectedFile(file);
+    setUploadedFileUrl(null);
+  };
+
+  const handleFileUpload = async () => {
+    if (!selectedFile) return;
+    setIsUploading(true);
+    setUploadProgress(10);
+    try {
+      const formData = new FormData();
+      formData.append("file", selectedFile);
+      formData.append("type", "submission");
+      const res = await fetch("/api/upload", { method: "POST", body: formData });
+      setUploadProgress(90);
+      const json = await res.json();
+      if (json.success) {
+        setUploadedFileUrl(json.url);
+        setSelectedFile(null);
+        setUploadProgress(100);
+      } else {
+        alert(json.error || "Echec du telechargement.");
+      }
+    } catch {
+      alert("Echec du telechargement du fichier.");
+    } finally {
+      setIsUploading(false);
+      setTimeout(() => setUploadProgress(0), 1000);
+    }
+  };
+
   const buildSubmissionContent = () => {
     if (!hasQuestions) return answers["global"] || "";
 
     return questions
       .map((q, i) => {
         const answer = answers[q.id] || "";
-        return `Question ${i + 1}: ${q.questionText}\nRéponse: ${answer}`;
+        return `Question ${i + 1}: ${q.questionText}\nReponse: ${answer}`;
       })
       .join("\n\n---\n\n");
   };
@@ -110,8 +155,8 @@ export function TpSubmissionCard({
     if (isLockedForFuture) return;
 
     const content = buildSubmissionContent();
-    if (!content.trim()) {
-      alert("Veuillez répondre à au moins une question avant d'envoyer.");
+    if (!content.trim() && !uploadedFileUrl) {
+      alert("Veuillez rediger une reponse ou joindre un fichier avant d'envoyer.");
       return;
     }
 
@@ -119,13 +164,14 @@ export function TpSubmissionCard({
     const res = await submitTpAssignment({
       assessmentId: assessment.id,
       submissionContent: content,
+      fileUrl: uploadedFileUrl ?? undefined,
     });
     setIsSubmitting(false);
 
     if (res.success) {
       setIsSubmitted(true);
     } else {
-      alert(res.error || "Échec de l'envoi du TP.");
+      alert(res.error || "Echec de l'envoi du TP.");
     }
   };
 
@@ -134,6 +180,7 @@ export function TpSubmissionCard({
     : (answers["global"] || "").trim().length > 0
     ? 1
     : 0;
+
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
@@ -333,6 +380,96 @@ export function TpSubmissionCard({
               rows={10}
               className="resize-y text-sm font-mono"
             />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── File Upload Card ── */}
+      {!isLockedForFuture && (
+        <Card className="shadow-sm border-dashed border-2">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Paperclip className="w-4 h-4 text-blue-600" />
+              Joindre un fichier (optionnel)
+            </CardTitle>
+            <CardDescription className="text-xs">
+              Vous pouvez joindre un document PDF, Word, ZIP ou tout autre fichier illustrant votre travail.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {/* Already uploaded */}
+            {uploadedFileUrl && (
+              <div className="flex items-center justify-between p-3 rounded-lg border bg-emerald-50/60 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800">
+                <div className="flex items-center gap-2 min-w-0">
+                  <FileText className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <div className="min-w-0">
+                    <div className="text-xs font-semibold text-foreground">Fichier joint</div>
+                    <div className="text-[10px] text-muted-foreground font-mono truncate max-w-[220px]">
+                      {uploadedFileUrl.split("/").pop()}
+                    </div>
+                  </div>
+                </div>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-7 w-7 text-rose-500 hover:text-rose-700 shrink-0"
+                  onClick={() => { setUploadedFileUrl(null); setSelectedFile(null); }}
+                >
+                  <X className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            )}
+
+            {/* File selector */}
+            {!uploadedFileUrl && (
+              <div className="space-y-2">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf,.doc,.docx,.zip,.rar,.txt,.png,.jpg,.jpeg"
+                  className="hidden"
+                  onChange={handleFileSelect}
+                />
+                {selectedFile ? (
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <div className="flex items-center gap-2 text-xs text-foreground bg-muted rounded-lg px-3 py-2 flex-1 min-w-0">
+                      <FileText className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                      <span className="truncate font-mono">{selectedFile.name}</span>
+                      <span className="text-muted-foreground shrink-0">
+                        ({(selectedFile.size / 1024 / 1024).toFixed(2)} Mo)
+                      </span>
+                    </div>
+                    <Button
+                      size="sm"
+                      className="bg-blue-600 hover:bg-blue-700 text-white text-xs gap-1.5 shrink-0"
+                      onClick={handleFileUpload}
+                      disabled={isUploading}
+                    >
+                      <UploadCloud className="w-3.5 h-3.5" />
+                      {isUploading ? `Envoi... ${uploadProgress}%` : "Téléverser"}
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-8 w-8 text-muted-foreground"
+                      onClick={() => setSelectedFile(null)}
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5 text-xs"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <Paperclip className="w-3.5 h-3.5" />
+                    Choisir un fichier
+                  </Button>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

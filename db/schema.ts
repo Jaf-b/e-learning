@@ -230,6 +230,9 @@ export const courses = pgTable("courses", {
     status: courseStatusEnum("status").notNull().default("DRAFT"),
     authorId: text("author_id").notNull().references(() => user.id),
     rejectionReason: text("rejection_reason"),
+    videoUrl: text("video_url"),
+    syllabus: text("syllabus"),
+    syllabusUrl: text("syllabus_url"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -508,6 +511,9 @@ export const studentResponses = pgTable("student_responses", {
 
     // Si c'est une question ouverte/rédaction : texte saisi par l'étudiant
     textAnswer: text("text_answer"),
+
+    // Si c'est un TP/Devoir : URL ou chemin du fichier téléversé localement (PDF, ZIP, DOCX, etc.)
+    fileUrl: text("file_url"),
 
     // Points attribués à cette réponse spécifique (rempli automatiquement pour QCM ou par le prof)
     scoreObtained: numeric("score_obtained", { precision: 5, scale: 2 }),
