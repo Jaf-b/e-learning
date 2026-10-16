@@ -19,6 +19,21 @@ import { TpSubmissionRecord } from "@/lib/types";
 import { and, asc, eq, inArray, desc } from "drizzle-orm";
 import { Course } from "@/lib/types";
 import { revalidatePath, unstable_cache, updateTag } from "next/cache";
+import { auth } from "@/lib/auth";
+import { headers } from "next/headers";
+
+async function getCurrentUser() {
+  try {
+    const session = await auth.api.getSession({
+      headers: await headers(),
+    });
+    return session?.user ?? null;
+  } catch (error) {
+    console.error("Error getting session in courses.actions:", error);
+    return null;
+  }
+}
+
 
 interface UpdateStudentCourseGradesParams {
   studentEnrollmentId: string;
@@ -294,14 +309,16 @@ export async function getAssessmentsByCourseId(courseId: string): Promise<Assess
 export async function getStudentGradesOverview(courseId: string): Promise<StudentGradeOverview[]> {
   if (!courseId) return [];
 
-  const activePromotions = await db.query.promotionCourses.findMany({
+  const activePromotionCourses = await db.query.promotionCourses.findMany({
     where: eq(promotionCourses.courseId, courseId),
     columns: {
+      id: true,
       promotionId: true,
     },
   });
 
-  const promotionIds = activePromotions.map((p) => p.promotionId);
+  const promotionIds = activePromotionCourses.map((p) => p.promotionId);
+  const promotionCourseIds = new Set(activePromotionCourses.map((p) => p.id));
 
   if (promotionIds.length === 0) {
     return [];
@@ -325,20 +342,24 @@ export async function getStudentGradesOverview(courseId: string): Promise<Studen
   });
 
   return data.map((enrollment) => {
-    let quizScore: number | null = null;
-    let tpScore: number | null = null;
-    let examScore: number | null = null;
+    const quizScores: number[] = [];
+    const tpScores: number[] = [];
+    const examScores: number[] = [];
 
     enrollment.grades.forEach((g) => {
       if (!g.assessment || g.score === null) return;
-      if (g.assessment.promotionCourseId && g.assessment.promotionCourseId !== courseId) return;
+      if (g.assessment.promotionCourseId && !promotionCourseIds.has(g.assessment.promotionCourseId)) return;
 
       const scoreNum = Number(g.score);
 
-      if (g.assessment.type === "QUIZ") quizScore = scoreNum;
-      if (g.assessment.type === "TP") tpScore = scoreNum;
-      if (g.assessment.type === "EXAM") examScore = scoreNum;
+      if (g.assessment.type === "QUIZ") quizScores.push(scoreNum);
+      if (g.assessment.type === "TP" || g.assessment.type === "ASSIGNMENT") tpScores.push(scoreNum);
+      if (g.assessment.type === "EXAM" || g.assessment.type === "RETAKE_EXAM") examScores.push(scoreNum);
     });
+
+    const quizScore = quizScores.length > 0 ? Math.round((quizScores.reduce((a, b) => a + b, 0) / quizScores.length) * 10) / 10 : null;
+    const tpScore = tpScores.length > 0 ? Math.round((tpScores.reduce((a, b) => a + b, 0) / tpScores.length) * 10) / 10 : null;
+    const examScore = examScores.length > 0 ? Math.round((examScores.reduce((a, b) => a + b, 0) / examScores.length) * 10) / 10 : null;
 
     return {
       studentEnrollmentId: enrollment.id,
@@ -840,4 +861,42 @@ export async function gradeSubmission(data: {
     console.error("Erreur gradeSubmission:", error);
     return { success: false, error: "Impossible d'enregistrer la note." };
   }
-}
+}
+
+/**
+ * Récupère l'ensemble des soumissions de TP pour tous les cours de l'enseignant connecté
+ */
+export async function getAllTeacherTpSubmissions() {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return { success: false, submissions: [], error: "Non authentifié" };
+
+    const teacherCourses = await db.query.courses.findMany({
+      where: user.role === "ADMIN" ? undefined : eq(courses.authorId, user.id),
+      columns: { id: true, title: true, code: true },
+    });
+
+    if (teacherCourses.length === 0) {
+      return { success: true, submissions: [] };
+    }
+
+    const allSubmissions: (TpSubmissionRecord & { courseTitle: string; courseCode: string })[] = [];
+
+    for (const c of teacherCourses) {
+      const subs = await getTpSubmissionsByCourseId(c.id);
+      subs.forEach((s) => {
+        allSubmissions.push({
+          ...s,
+          courseTitle: c.title,
+          courseCode: c.code,
+        });
+      });
+    }
+
+    return { success: true, submissions: allSubmissions };
+  } catch (error) {
+    console.error("Erreur getAllTeacherTpSubmissions:", error);
+    return { success: false, submissions: [], error: "Échec de récupération des soumissions" };
+  }
+}
+

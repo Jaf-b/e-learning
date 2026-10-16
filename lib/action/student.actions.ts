@@ -375,6 +375,7 @@ export async function submitAssessmentAnswers(data: {
     const assessment = await db.query.assessments.findFirst({
       where: eq(assessments.id, data.assessmentId),
       with: {
+        promotionCourse: true,
         questions: {
           with: {
             options: true,
@@ -470,8 +471,19 @@ export async function submitAssessmentAnswers(data: {
       });
     }
 
+    const courseId = assessment.promotionCourse?.courseId;
+
     revalidatePath(`/student/assessment/${data.assessmentId}`);
-    revalidatePath(`/student/courses/${assessment.promotionCourseId}`);
+    if (courseId) {
+      revalidatePath(`/student/courses/${courseId}`);
+      revalidatePath(`/teacher/courses/${courseId}`);
+    }
+    revalidatePath("/student");
+    revalidatePath("/student/courses");
+    revalidatePath("/student/exam");
+    revalidatePath("/student/quiz");
+    revalidatePath("/teacher/courses");
+    revalidatePath("/teacher/submitted");
 
     return {
       success: true,
@@ -521,6 +533,7 @@ export async function submitTpAssignment(data: {
     const assessment = await db.query.assessments.findFirst({
       where: eq(assessments.id, data.assessmentId),
       with: {
+        promotionCourse: true,
         questions: true,
       },
     });
@@ -588,8 +601,18 @@ export async function submitTpAssignment(data: {
         .where(eq(grades.id, existingGrade.id));
     }
 
+    const courseId = assessment.promotionCourse?.courseId;
+
     revalidatePath(`/student/assessment/${data.assessmentId}`);
     revalidatePath(`/student/assignement`);
+    if (courseId) {
+      revalidatePath(`/student/courses/${courseId}`);
+      revalidatePath(`/teacher/courses/${courseId}`);
+    }
+    revalidatePath("/student");
+    revalidatePath("/student/courses");
+    revalidatePath("/teacher/submitted");
+    revalidatePath("/teacher/courses");
 
     return { success: true };
   } catch (error) {

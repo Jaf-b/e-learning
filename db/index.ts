@@ -1,19 +1,17 @@
+import dotenv from "dotenv";
+import path from "path";
+import { createClient } from "@libsql/client";
+import { drizzle } from "drizzle-orm/libsql";
+import * as schema from "./schema";
 
-import dotenv from 'dotenv';
-import path from 'path';
-import { neon } from '@neondatabase/serverless';
-import { drizzle } from 'drizzle-orm/neon-http';
-import * as schema from './schema';
+dotenv.config({ path: path.resolve(process.cwd(), ".env.local") });
+dotenv.config({ path: path.resolve(process.cwd(), ".env") });
 
-// On indique explicitement le chemin vers .env.local
-dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
+const dbPath = path.resolve(process.cwd(), "local.db").replace(/\\/g, "/");
+const client = createClient({
+  url: process.env.DATABASE_URL?.startsWith("file:")
+    ? process.env.DATABASE_URL
+    : `file:${dbPath}`,
+});
 
-const databaseUrl = process.env.DATABASE_URL;
-
-console.log(databaseUrl)
-if (!databaseUrl) {
-    throw new Error("❌ DATABASE_URL est manquante dans les variables d'environnement.");
-}
-
-const sql = neon(databaseUrl);
-export const db = drizzle({ client: sql, schema: schema });
+export const db = drizzle(client, { schema });

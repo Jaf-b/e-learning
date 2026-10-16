@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "../ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, Trash, Save, HelpCircle, AlertCircle, CheckCircle2, Sparkles, Check } from "lucide-react";
+import { Plus, Trash, Save, AlertCircle, CheckCircle2, Sparkles, Check } from "lucide-react";
 import { questions as questionsTable, questionOptions as questionOptionsTable } from "@/db/schema";
 import { createQuestion, updateQuestion, deleteQuestion } from "@/lib/action/question.actions";
 import { cn } from "@/lib/utils";
@@ -213,8 +213,6 @@ function QuestionDetail({ question, assessmentId, onSave, onDelete }: QuestionDe
                                 <SelectItem value="SINGLE_CHOICE">Choix unique (QCM)</SelectItem>
                                 <SelectItem value="MULTIPLE_CHOICE">Choix multiples (QCM)</SelectItem>
                                 <SelectItem value="TRUE_FALSE">Vrai / Faux</SelectItem>
-                                <SelectItem value="TEXT">Texte court</SelectItem>
-                                <SelectItem value="ESSAY">Rédaction / Dissertation</SelectItem>
                             </SelectContent>
                         </Select>
                     </div>
@@ -355,18 +353,8 @@ function QuestionDetail({ question, assessmentId, onSave, onDelete }: QuestionDe
                     </div>
                 )}
 
-                {/* Question ouverte / Rédaction */}
-                {["TEXT", "ESSAY"].includes(type) && (
-                    <div className="bg-blue-50/70 border border-blue-200 text-blue-900 p-4 rounded-xl text-sm flex items-start gap-3">
-                        <HelpCircle className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
-                        <div>
-                            <p className="font-bold">Zone de réponse libre ({type === "TEXT" ? "Texte court" : "Rédaction / Dissertation"}) :</p>
-                            <p className="mt-1 text-blue-800/90 text-xs leading-relaxed">
-                                Les étudiants disposeront d'un champ de saisie pour répondre avec leurs propres mots. Vous pourrez évaluer leurs réponses manuellement dans le tableau des soumissions.
-                            </p>
-                        </div>
-                    </div>
-                )}
+
+
 
                 {/* Explication / Correction pédagogique */}
                 <div className="flex flex-col gap-2">

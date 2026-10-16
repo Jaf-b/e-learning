@@ -5,7 +5,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { BookOpen, PlayCircle, ChevronLeft, ChevronRight, FileText } from "lucide-react";
+import {
+  BookOpen,
+  PlayCircle,
+  ChevronLeft,
+  ChevronRight,
+  FileText,
+  FileDown,
+  Video,
+  Download,
+} from "lucide-react";
 
 interface Lesson {
   id: string;
@@ -25,10 +34,158 @@ interface Module {
 interface CourseLessonViewerProps {
   courseTitle: string;
   modules: Module[];
+  /** URL du fichier syllabus téléchargeable (PDF, DOCX, etc.) */
+  syllabusUrl?: string | null;
+  /** Texte du syllabus (contenu brut) */
+  syllabus?: string | null;
+  /** URL de la vidéo de présentation du cours */
+  courseVideoUrl?: string | null;
 }
 
-export function CourseLessonViewer({ courseTitle, modules }: CourseLessonViewerProps) {
-  // Flatten all lessons for navigation
+/** Convertit une URL YouTube / Vimeo en URL embed. Sinon retourne l'URL brute. */
+function getEmbedVideoUrl(url: string | null): string | null {
+  if (!url) return null;
+  const trimmed = url.trim();
+  if (trimmed.includes("youtube.com/watch?v=")) {
+    const videoId = trimmed.split("watch?v=")[1]?.split("&")[0];
+    return videoId ? `https://www.youtube.com/embed/${videoId}` : null;
+  }
+  if (trimmed.includes("youtu.be/")) {
+    const videoId = trimmed.split("youtu.be/")[1]?.split("?")[0];
+    return videoId ? `https://www.youtube.com/embed/${videoId}` : null;
+  }
+  if (trimmed.includes("vimeo.com/")) {
+    const videoId = trimmed.split("vimeo.com/")[1]?.split("?")[0];
+    return videoId ? `https://player.vimeo.com/video/${videoId}` : null;
+  }
+  return trimmed;
+}
+
+function isEmbeddable(url: string): boolean {
+  return url.includes("youtube") || url.includes("youtu.be") || url.includes("vimeo");
+}
+
+/** Rend le lecteur vidéo adapté au type d'URL */
+function VideoPlayer({ url, title }: { url: string; title: string }) {
+  const embedUrl = getEmbedVideoUrl(url);
+  return (
+    <div className="aspect-video w-full rounded-xl overflow-hidden bg-black shadow-inner">
+      {isEmbeddable(url) && embedUrl ? (
+        <iframe
+          src={embedUrl}
+          title={title}
+          className="w-full h-full border-0"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowFullScreen
+        />
+      ) : (
+        <video
+          src={url}
+          controls
+          className="w-full h-full object-contain"
+        />
+      )}
+    </div>
+  );
+}
+
+/** Panneau syllabus — affiché à droite */
+function SyllabusPanel({
+  syllabusUrl,
+  syllabus,
+  courseVideoUrl,
+  courseTitle,
+}: {
+  syllabusUrl?: string | null;
+  syllabus?: string | null;
+  courseVideoUrl?: string | null;
+  courseTitle: string;
+}) {
+  const hasSyllabus = !!syllabusUrl || !!syllabus;
+  const hasCourseVideo = !!courseVideoUrl;
+
+  return (
+    <div className="space-y-4">
+      {/* Vidéo de présentation du cours */}
+      {hasCourseVideo && (
+        <Card className="overflow-hidden shadow-sm">
+          <CardHeader className="pb-2 bg-muted/20 border-b">
+            <CardTitle className="text-sm font-bold flex items-center gap-2">
+              <Video className="w-4 h-4 text-blue-600" />
+              Vidéo de présentation
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-3">
+            <VideoPlayer url={courseVideoUrl!} title={courseTitle} />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Syllabus */}
+      <Card className="shadow-sm">
+        <CardHeader className="pb-2 bg-muted/20 border-b">
+          <CardTitle className="text-sm font-bold flex items-center gap-2">
+            <FileText className="w-4 h-4 text-primary" />
+            Syllabus du cours
+          </CardTitle>
+          <CardDescription className="text-xs">
+            Programme, objectifs et modalités de notation.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="p-4 space-y-3">
+          {/* Bouton téléchargement */}
+          {syllabusUrl && (
+            <div className="p-3 rounded-xl border bg-blue-50/70 dark:bg-blue-950/30 border-blue-200 dark:border-blue-900 flex flex-col gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-1.5 bg-blue-100 dark:bg-blue-900 rounded-lg text-blue-700 dark:text-blue-300 shrink-0">
+                  <FileText className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <div className="font-semibold text-xs text-foreground">Syllabus officiel</div>
+                  <div className="text-[10px] text-muted-foreground font-mono truncate">
+                    {syllabusUrl.split("/").pop()}
+                  </div>
+                </div>
+              </div>
+              <a
+                href={syllabusUrl}
+                download
+                className="inline-flex items-center justify-center gap-1.5 w-full px-3 py-2 rounded-lg bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700 transition-colors"
+              >
+                <Download className="w-3.5 h-3.5" />
+                Télécharger le syllabus
+              </a>
+            </div>
+          )}
+
+          {/* Contenu texte du syllabus */}
+          {syllabus ? (
+            <div className="prose prose-sm dark:prose-invert max-w-none text-xs leading-relaxed whitespace-pre-wrap max-h-[400px] overflow-y-auto pr-1 scrollbar-thin">
+              {syllabus}
+            </div>
+          ) : !syllabusUrl ? (
+            <div className="text-center py-8 border border-dashed rounded-xl bg-muted/20 text-muted-foreground">
+              <FileText className="w-8 h-8 mx-auto mb-2 opacity-40" />
+              <p className="text-xs font-medium text-foreground">Syllabus non disponible</p>
+              <p className="text-[11px] mt-1">
+                L&apos;enseignant publiera le syllabus prochainement.
+              </p>
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+export function CourseLessonViewer({
+  courseTitle,
+  modules,
+  syllabusUrl,
+  syllabus,
+  courseVideoUrl,
+}: CourseLessonViewerProps) {
+  // Flatten all lessons for linear navigation
   const allLessons: { lesson: Lesson; moduleTitle: string }[] = [];
   modules.forEach((mod) => {
     mod.lessons?.forEach((les) => {
@@ -40,12 +197,11 @@ export function CourseLessonViewer({ courseTitle, modules }: CourseLessonViewerP
     allLessons[0]?.lesson.id || null
   );
 
-  // Controlled accordion: all modules open by default
+  // All modules open by default in sidebar
   const [openModules, setOpenModules] = useState<string[]>(modules.map((m) => m.id));
 
   useEffect(() => {
     setOpenModules(modules.map((m) => m.id));
-    // Set first lesson as active when modules load
     if (!activeLessonId && allLessons.length > 0) {
       setActiveLessonId(allLessons[0].lesson.id);
     }
@@ -62,16 +218,6 @@ export function CourseLessonViewer({ courseTitle, modules }: CourseLessonViewerP
     if (activeIndex < allLessons.length - 1) setActiveLessonId(allLessons[activeIndex + 1].lesson.id);
   };
 
-  const getEmbedVideoUrl = (url: string | null) => {
-    if (!url) return null;
-    if (url.includes("youtube.com/watch?v=")) return url.replace("watch?v=", "embed/");
-    if (url.includes("youtu.be/")) {
-      const id = url.split("youtu.be/")[1];
-      return `https://www.youtube.com/embed/${id}`;
-    }
-    return url;
-  };
-
   if (!modules || modules.length === 0) {
     return (
       <Card className="p-8 text-center border-dashed">
@@ -85,122 +231,56 @@ export function CourseLessonViewer({ courseTitle, modules }: CourseLessonViewerP
   }
 
   return (
-    <div className="flex sm:flex-col gap-6">
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
 
-      {/* ── LEFT: Module & Lesson Navigation ── */}
-      <div className="lg:col-span-4">
-        <div className="sticky top-4">
-          <Card className="shadow-sm overflow-hidden">
-            <CardHeader className="pb-3 border-b">
-              <CardTitle className="text-base flex items-center justify-between">
-                <span>Programme du cours</span>
-                <Badge variant="secondary">{allLessons.length} leçon{allLessons.length > 1 ? "s" : ""}</Badge>
-              </CardTitle>
-              <CardDescription className="text-xs">
-                Sélectionnez un chapitre pour commencer la lecture.
-              </CardDescription>
-            </CardHeader>
+      {/* ── COLONNE GAUCHE / PRINCIPALE (8/12) ── */}
+      <div className="lg:col-span-8 space-y-4">
 
-            {/* Scrollable lesson list */}
-            <div className="max-h-[65vh] overflow-y-auto">
-              <CardContent className="p-2">
-                <Accordion
-                  type="multiple"
-                  value={openModules}
-                  onValueChange={setOpenModules}
-                  className="w-full"
-                >
-                  {modules.map((mod, modIdx) => (
-                    <AccordionItem key={mod.id} value={mod.id} className="border-b-0 mb-1">
-                      <AccordionTrigger className="px-3 py-2 text-sm font-medium hover:no-underline rounded-lg hover:bg-accent/50">
-                        <div className="flex items-center gap-2 text-left w-full">
-                          <span className="w-5 h-5 rounded-full bg-primary/10 text-primary text-xs flex items-center justify-center font-semibold shrink-0">
-                            {modIdx + 1}
-                          </span>
-                          <span className="line-clamp-1 flex-1">{mod.title}</span>
-                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0.5 shrink-0">
-                            {mod.lessons?.length ?? 0} leçon{(mod.lessons?.length ?? 0) > 1 ? "s" : ""}
-                          </Badge>
-                        </div>
-                      </AccordionTrigger>
-
-                      <AccordionContent className="pt-1 pb-1 pl-4 space-y-1">
-                        {mod.lessons && mod.lessons.length > 0 ? (
-                          mod.lessons.map((les) => {
-                            const isActive = les.id === activeLessonId;
-                            return (
-                              <button
-                                key={les.id}
-                                onClick={() => setActiveLessonId(les.id)}
-                                className={`w-full flex items-center gap-2 text-left px-3 py-2 text-xs rounded-md transition-colors ${
-                                  isActive
-                                    ? "bg-primary text-primary-foreground font-medium"
-                                    : "hover:bg-accent text-foreground"
-                                }`}
-                              >
-                                {les.videoUrl ? (
-                                  <PlayCircle className="w-3.5 h-3.5 shrink-0" />
-                                ) : (
-                                  <FileText className="w-3.5 h-3.5 shrink-0" />
-                                )}
-                                <span className="line-clamp-2">{les.title}</span>
-                              </button>
-                            );
-                          })
-                        ) : (
-                          <p className="text-xs text-muted-foreground px-3 py-2 italic">
-                            Aucune leçon dans ce module.
-                          </p>
-                        )}
-                      </AccordionContent>
-                    </AccordionItem>
-                  ))}
-                </Accordion>
-              </CardContent>
-            </div>
-          </Card>
-        </div>
-      </div>
-
-      {/* ── RIGHT: Lesson Content ── */}
-      <div className="flex-1 space-y-6">
-        {activeItem ? (
-          <Card className="shadow-md border-primary/20">
-            <CardHeader className="border-b pb-4">
-              <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
-                <span>{activeItem.moduleTitle}</span>
-                <Badge variant="outline">
+        {/* ── 1. VIDÉO DE LA LEÇON (en haut) ── */}
+        {activeItem?.lesson.videoUrl ? (
+          <Card className="overflow-hidden shadow-sm border-primary/20">
+            <CardHeader className="pb-2 border-b">
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span className="font-medium text-primary flex items-center gap-1">
+                  <PlayCircle className="w-3.5 h-3.5" />
+                  {activeItem.moduleTitle}
+                </span>
+                <Badge variant="outline" className="text-[10px]">
                   Leçon {activeIndex + 1} / {allLessons.length}
                 </Badge>
               </div>
-              <CardTitle className="text-2xl font-bold">{activeItem.lesson.title}</CardTitle>
+              <CardTitle className="text-xl font-bold mt-1">{activeItem.lesson.title}</CardTitle>
             </CardHeader>
+            <CardContent className="p-4">
+              <VideoPlayer url={activeItem.lesson.videoUrl} title={activeItem.lesson.title} />
+            </CardContent>
+          </Card>
+        ) : activeItem ? (
+          /* Pas de vidéo — juste le titre de la leçon */
+          <Card className="shadow-sm border-primary/20">
+            <CardHeader className="pb-3 border-b">
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span className="font-medium text-primary">{activeItem.moduleTitle}</span>
+                <Badge variant="outline" className="text-[10px]">
+                  Leçon {activeIndex + 1} / {allLessons.length}
+                </Badge>
+              </div>
+              <CardTitle className="text-xl font-bold mt-1">{activeItem.lesson.title}</CardTitle>
+            </CardHeader>
+          </Card>
+        ) : null}
 
-            <CardContent className="space-y-6 pt-6">
-              {/* Video */}
-              {activeItem.lesson.videoUrl && (
-                <div className="aspect-video w-full rounded-xl overflow-hidden  bg-black shadow-inner">
-                  {activeItem.lesson.videoUrl.includes("youtube") ||
-                  activeItem.lesson.videoUrl.includes("youtu.be") ? (
-                    <iframe
-                      src={getEmbedVideoUrl(activeItem.lesson.videoUrl) || ""}
-                      title={activeItem.lesson.title}
-                      className="w-full h-full border-0"
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                      allowFullScreen
-                    />
-                  ) : (
-                    <video
-                      src={activeItem.lesson.videoUrl}
-                      controls
-                      className="w-full h-full object-contain"
-                    />
-                  )}
-                </div>
-              )}
-
-              {/* Text content */}
-              <div className="prose mt-5 dark:prose-invert max-w-none text-sm leading-relaxed whitespace-pre-wrap">
+        {/* ── 2. CONTENU TEXTE (en bas, sous la vidéo) ── */}
+        {activeItem && (
+          <Card className="shadow-sm">
+            <CardHeader className="pb-3 border-b">
+              <CardTitle className="text-sm font-bold flex items-center gap-2">
+                <BookOpen className="w-4 h-4 text-primary" />
+                Contenu de la leçon
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-5">
+              <div className="prose prose-sm dark:prose-invert max-w-none text-sm leading-relaxed whitespace-pre-wrap min-h-[120px]">
                 {activeItem.lesson.content ? (
                   activeItem.lesson.content
                 ) : (
@@ -213,26 +293,121 @@ export function CourseLessonViewer({ courseTitle, modules }: CourseLessonViewerP
                 )}
               </div>
 
-              {/* Prev / Next navigation */}
-              <div className="flex items-center justify-between border-t pt-4">
-                <Button variant="outline" size="sm" onClick={handlePrev} disabled={activeIndex <= 0}>
+              {/* ── Navigation Prev / Next ── */}
+              <div className="flex items-center justify-between border-t pt-4 mt-6">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handlePrev}
+                  disabled={activeIndex <= 0}
+                >
                   <ChevronLeft className="w-4 h-4 mr-1" /> Précédent
                 </Button>
-                <span className="text-xs text-muted-foreground">
-                  {activeIndex + 1} de {allLessons.length}
+                <span className="text-xs text-muted-foreground tabular-nums">
+                  {activeIndex + 1} / {allLessons.length}
                 </span>
-                <Button size="sm" onClick={handleNext} disabled={activeIndex >= allLessons.length - 1}>
+                <Button
+                  size="sm"
+                  onClick={handleNext}
+                  disabled={activeIndex >= allLessons.length - 1}
+                >
                   Suivant <ChevronRight className="w-4 h-4 ml-1" />
                 </Button>
               </div>
             </CardContent>
           </Card>
-        ) : (
+        )}
+
+        {!activeItem && (
           <Card className="p-8 text-center">
             <BookOpen className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
             <p className="text-muted-foreground">Veuillez sélectionner une leçon dans le menu.</p>
           </Card>
         )}
+      </div>
+
+      {/* ── COLONNE DROITE (4/12) ── */}
+      <div className="lg:col-span-4 space-y-4">
+
+        {/* Navigation modules & leçons */}
+        <Card className="shadow-sm overflow-hidden sticky top-4">
+          <CardHeader className="pb-3 border-b">
+            <CardTitle className="text-base flex items-center justify-between">
+              <span>Programme du cours</span>
+              <Badge variant="secondary">
+                {allLessons.length} leçon{allLessons.length > 1 ? "s" : ""}
+              </Badge>
+            </CardTitle>
+            <CardDescription className="text-xs">
+              Sélectionnez un chapitre pour commencer la lecture.
+            </CardDescription>
+          </CardHeader>
+
+          <div className="max-h-[55vh] overflow-y-auto">
+            <CardContent className="p-2">
+              <Accordion
+                type="multiple"
+                value={openModules}
+                onValueChange={setOpenModules}
+                className="w-full"
+              >
+                {modules.map((mod, modIdx) => (
+                  <AccordionItem key={mod.id} value={mod.id} className="border-b-0 mb-1">
+                    <AccordionTrigger className="px-3 py-2 text-sm font-medium hover:no-underline rounded-lg hover:bg-accent/50">
+                      <div className="flex items-center gap-2 text-left w-full">
+                        <span className="w-5 h-5 rounded-full bg-primary/10 text-primary text-xs flex items-center justify-center font-semibold shrink-0">
+                          {modIdx + 1}
+                        </span>
+                        <span className="line-clamp-1 flex-1">{mod.title}</span>
+                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0.5 shrink-0">
+                          {mod.lessons?.length ?? 0}
+                        </Badge>
+                      </div>
+                    </AccordionTrigger>
+
+                    <AccordionContent className="pt-1 pb-1 pl-4 space-y-1">
+                      {mod.lessons && mod.lessons.length > 0 ? (
+                        mod.lessons.map((les) => {
+                          const isActive = les.id === activeLessonId;
+                          return (
+                            <button
+                              key={les.id}
+                              onClick={() => setActiveLessonId(les.id)}
+                              className={`w-full flex items-center gap-2 text-left px-3 py-2 text-xs rounded-md transition-colors ${
+                                isActive
+                                  ? "bg-primary text-primary-foreground font-medium"
+                                  : "hover:bg-accent text-foreground"
+                              }`}
+                            >
+                              {les.videoUrl ? (
+                                <PlayCircle className="w-3.5 h-3.5 shrink-0" />
+                              ) : (
+                                <FileText className="w-3.5 h-3.5 shrink-0" />
+                              )}
+                              <span className="line-clamp-2">{les.title}</span>
+                            </button>
+                          );
+                        })
+                      ) : (
+                        <p className="text-xs text-muted-foreground px-3 py-2 italic">
+                          Aucune leçon dans ce module.
+                        </p>
+                      )}
+                    </AccordionContent>
+                  </AccordionItem>
+                ))}
+              </Accordion>
+            </CardContent>
+          </div>
+        </Card>
+
+        {/* Syllabus & vidéo de présentation du cours */}
+        <SyllabusPanel
+          syllabusUrl={syllabusUrl}
+          syllabus={syllabus}
+          courseVideoUrl={courseVideoUrl}
+          courseTitle={courseTitle}
+        />
       </div>
 
     </div>
